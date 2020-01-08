@@ -48,7 +48,7 @@ func Main() error {
 	}
 
 	cfg := &dbcsv.Config{}
-	flagDB := flag.String("connect", "$BRUNO_ID", "database to connect to")
+	flagConnect := flag.String("connect", os.Getenv("DB_ID"), "database to connect to")
 	flag.StringVar(&cfg.Charset, "charset", encName, "input charset")
 	flagTruncate := flag.Bool("truncate", false, "truncate table")
 	flagTablespace := flag.String("tablespace", "DATA", "tablespace to create table in")
@@ -64,6 +64,9 @@ func Main() error {
 	flagCPUProf := flag.String("cpuprofile", "", "file to output CPU profile to")
 	flagJustPrint := flag.Bool("just-print", false, "just print the INSERTs")
 	flagCopy := flag.String("copy", "", "copy this table's structure")
+	if *flagConnect == "" {
+		*flagConnect = os.Getenv("BRUNO_ID")
+	}
 	flag.Parse()
 
 	if flag.NArg() != 2 {
@@ -97,12 +100,9 @@ func Main() error {
 		}
 	}
 
-	if strings.HasPrefix(*flagDB, "$") {
-		*flagDB = os.ExpandEnv(*flagDB)
-	}
-	db, err := sql.Open("godror", *flagDB)
+	db, err := sql.Open("godror", *flagConnect)
 	if err != nil {
-		return errors.Errorf("%s: %w", *flagDB, err)
+		return errors.Errorf("%s: %w", *flagConnect, err)
 	}
 	defer db.Close()
 

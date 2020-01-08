@@ -59,7 +59,7 @@ func Main() error {
 
 	var cfg dbcsv.Config
 	flag.IntVar(&cfg.Sheet, "sheet", 0, "Index of sheet to convert, zero based")
-	flagConnect := flag.String("connect", "$BRUNO_ID", "database connection string")
+	flagConnect := flag.String("connect", os.Getenv("DB_ID"), "database connection string")
 	flagFunc := flag.String("call", "DBMS_OUTPUT.PUT_LINE", "function name to be called with each line")
 	flagFixParams := flag.String("fix", "p_file_name=>{{.FileName}}", "fix parameters to add; uses text/template")
 	flagFuncRetOk := flag.Int("call-ret-ok", 0, "OK return value")
@@ -81,6 +81,9 @@ Usage:
 		flag.PrintDefaults()
 	}
 
+	if *flagConnect == "" {
+		*flagConnect = os.Getenv("BRUNO_ID")
+	}
 	flag.Parse()
 	if flag.NArg() != 1 {
 		flag.Usage()

@@ -72,7 +72,7 @@ func main() {
 }
 
 func Main() error {
-	flagConnect := flag.String("connect", os.Getenv("BRUNO_ID"), "user/passw@sid to connect to")
+	flagConnect := flag.String("connect", os.Getenv("DB_ID"), "user/passw@sid to connect to")
 	flagDateFormat := flag.String("date", dateFormat, "date format, in Go notation")
 	flagSep := flag.String("sep", ";", "separator")
 	flagHeader := flag.Bool("header", true, "print header")
@@ -96,6 +96,9 @@ and dump all the columns of the cursor returned by the function.
 
 `, "{{.prog}}", os.Args[0], -1))
 		flag.PrintDefaults()
+	}
+	if *flagConnect == "" {
+		*flagConnect = os.Getenv("BRUNO_ID")
 	}
 	flag.Parse()
 
@@ -328,7 +331,7 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 		params = append(append(make([]interface{}, 0, 1+len(params)),
 			sql.Out{Dest: &dRows}), params...)
 		if _, err = db.ExecContext(ctx, qry, params...); err == nil {
-			rows, err = godror.WrapRows(ctx,db,dRows)
+			rows, err = godror.WrapRows(ctx, db, dRows)
 		}
 	}
 	if err != nil {
