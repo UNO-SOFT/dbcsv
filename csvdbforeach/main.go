@@ -1,6 +1,6 @@
-// Copyright 2011-2017, Tamás Gulácsi.
-// All rights reserved.
-// For details, see the LICENSE file.
+// Copyright 2020, Tamás Gulácsi.
+//
+// SPDX-License-Identifier: Apache-2.0
 
 package main
 

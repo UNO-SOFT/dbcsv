@@ -1,4 +1,6 @@
-// Copyright 2017 Tamás Gulácsi. All rights reserved.
+// Copyright 2020, Tamás Gulácsi.
+//
+// SPDX-License-Identifier: Apache-2.0
 
 package dbcsv
 
@@ -55,7 +57,7 @@ func DetectReaderType(r io.Reader, fileName string) (FileType, error) {
 		return Xls, nil
 	} else if bytes.Equal(b[:], []byte{0x50, 0x4b, 0x03, 0x04}) { //PKZip, so xlsx
 		return XlsX, nil
-	} 
+	}
 	// CSV
 	return Csv, nil
 }
@@ -298,11 +300,11 @@ func ReadXLSFile(ctx context.Context, fn func(string, Row) error, filename strin
 		}
 		vals := make([]string, 0, maxWidth)
 		off := row.FirstCol()
-		if w := row.LastCol()-off ; cap(vals) < w {
+		if w := row.LastCol() - off; cap(vals) < w {
 			maxWidth = w
 			vals = make([]string, w)
 		} else {
-			vals =vals[:w]
+			vals = vals[:w]
 		}
 
 		for j := off; j < row.LastCol(); j++ {

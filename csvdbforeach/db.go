@@ -1,6 +1,6 @@
-// Copyright 2017, Tamás Gulácsi.
-// All rights reserved.
-// For details, see the LICENSE file.
+// Copyright 2020, Tamás Gulácsi.
+//
+// SPDX-License-Identifier: Apache-2.0
 
 package main
 
@@ -249,13 +249,13 @@ ArgLoop:
 			switch arg.Type {
 			case "DATE":
 				var t time.Time
-				st.FixParams = append(st.FixParams, sql.Out{Dest:&t})
+				st.FixParams = append(st.FixParams, sql.Out{Dest: &t})
 			case "NUMBER":
 				var f float64
-				st.FixParams = append(st.FixParams, sql.Out{Dest:&f})
+				st.FixParams = append(st.FixParams, sql.Out{Dest: &f})
 			default:
 				var s string
-				st.FixParams = append(st.FixParams, sql.Out{Dest:&s})
+				st.FixParams = append(st.FixParams, sql.Out{Dest: &s})
 			}
 		} else if arg.Type == "DATE" {
 			st.Converters[j] = strToDate
