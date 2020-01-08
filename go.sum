@@ -22,6 +22,8 @@ github.com/FiloSottile/b2 v0.0.0-20170207175032-b197f7a2c317/go.mod h1:3DBotXAz3
 github.com/PuerkitoBio/goquery v1.5.0/go.mod h1:qD2PgZ9lccMbQlc7eEOjaeRlFQON7xY8kdmcsrnKqMg=
 github.com/UNO-SOFT/spreadsheet v0.0.0-20200108052508-9b1d06f7ac16 h1:sCYQQ21SYw/I2BwuInaWqlc2RRajmumsI+HN3RLBiDg=
 github.com/UNO-SOFT/spreadsheet v0.0.0-20200108052508-9b1d06f7ac16/go.mod h1:2tEWLO++E0EF7ODSRpUR8op0jAH3jPCZYPgY703/znA=
+github.com/UNO-SOFT/spreadsheet v0.0.1 h1:HVH8yFBMZ/WguJycS0BqJkZF9+tnPFuO0oeqjm1gR4g=
+github.com/UNO-SOFT/spreadsheet v0.0.1/go.mod h1:2tEWLO++E0EF7ODSRpUR8op0jAH3jPCZYPgY703/znA=
 github.com/andybalholm/cascadia v1.0.0/go.mod h1:GsXiBklL0woXo1j/WYWtSYYC4ouU9PqHO0sqidkEA4Y=
 github.com/anmitsu/go-shlex v0.0.0-20161002113705-648efa622239/go.mod h1:2FmKhYUyUczH0OGQWaF5ceTx0UBShxjsH6f8oGKYe2c=
 github.com/aws/aws-sdk-go v1.14.31/go.mod h1:mFuSZ37Z9YOHbQEwBWztmVzqXrEkub65tZoCYDt7FT0=
