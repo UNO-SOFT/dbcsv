@@ -66,6 +66,7 @@ func Main() error {
 	flagHeader := flag.Bool("header", true, "print header")
 	flagEnc := flag.String("encoding", envEnc.Name, "encoding to use for output")
 	flagOut := flag.String("o", "-", "output (defaults to stdout)")
+	flagRaw := flag.Bool("raw", false, "not real csv, just dump the raw data")
 	flagSheets := flagStrings()
 	flag.Var(flagSheets, "sheet", "each -sheet=name:SELECT will become a separate sheet on the output ods")
 	flagVerbose := flag.Bool("v", false, "verbose logging")
@@ -202,7 +203,7 @@ and dump all the columns of the cursor returned by the function.
 			err = qErr
 		} else {
 			defer rows.Close()
-			err = dumpCSV(ctx, w, rows, columns, *flagHeader, *flagSep, Log)
+			err = dumpCSV(ctx, w, rows, columns, *flagHeader, *flagSep, *flagRaw, Log)
 		}
 	} else {
 		var w spreadsheet.Writer
@@ -333,7 +334,7 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 	return rows, columns, nil
 }
 
-func dumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column, header bool, sep string, Log func(...interface{}) error) error {
+func dumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column, header bool, sep string, raw bool, Log func(...interface{}) error) error {
 	sepB := []byte(sep)
 	dest := make([]interface{}, len(columns))
 	bw := bufio.NewWriterSize(w, 65536)
@@ -344,7 +345,7 @@ func dumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column,
 		values[i] = c
 		dest[i] = c.Pointer()
 	}
-	if header {
+	if header && !raw {
 		for i, col := range columns {
 			if i > 0 {
 				bw.Write(sepB)
@@ -360,14 +361,27 @@ func dumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column,
 		if err := rows.Scan(dest...); err != nil {
 			return errors.Errorf("scan into %#v: %w", dest, err)
 		}
-		for i, data := range dest {
-			if i > 0 {
-				bw.Write(sepB)
+		if raw {
+			for i, data := range dest {
+				if data == nil {
+					continue
+				}
+				if sr, ok := values[i].(interface{ StringRaw() string }); ok {
+					bw.WriteString(sr.StringRaw())
+				} else {
+					bw.WriteString(values[i].String())
+				}
 			}
-			if data == nil {
-				continue
+		} else {
+			for i, data := range dest {
+				if i > 0 {
+					bw.Write(sepB)
+				}
+				if data == nil {
+					continue
+				}
+				bw.WriteString(values[i].String())
 			}
-			bw.WriteString(values[i].String())
 		}
 		bw.Write([]byte{'\n'})
 		n++
@@ -430,6 +444,7 @@ type ValString struct {
 }
 
 func (v ValString) String() string            { return csvQuoteString(v.Sep, v.Value.String) }
+func (v ValString) StringRaw() string         { return v.Value.String }
 func (v *ValString) Pointer() interface{}     { return &v.Value }
 func (v *ValString) Scan(x interface{}) error { return v.Value.Scan(x) }
 
@@ -481,6 +496,16 @@ func (v ValTime) String() string {
 	}
 	return v.Value.Format(dateFormat)
 }
+func (v ValTime) StringRaw() string {
+	if v.Value.IsZero() {
+		return ""
+	}
+	if v.Value.Year() < 0 {
+		return dEnd
+	}
+	return v.Value.Format(dateFormat)
+}
+
 func (vt ValTime) ConvertValue(v interface{}) (driver.Value, error) {
 	if v == nil {
 		return time.Time{}, nil
