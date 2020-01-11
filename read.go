@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -414,5 +415,16 @@ type Row struct {
 	Line   int
 	Values []string
 }
+
+func FlagStrings() *StringsValue {
+	return &StringsValue{}
+}
+
+type StringsValue struct {
+	Strings []string
+}
+
+func (ss StringsValue) String() string      { return fmt.Sprintf("%v", ss.Strings) }
+func (ss *StringsValue) Set(s string) error { ss.Strings = append(ss.Strings, s); return nil }
 
 // vim: set noet fileencoding=utf-8:

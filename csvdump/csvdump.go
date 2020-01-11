@@ -51,7 +51,7 @@ func Main() error {
 	flagEnc := flag.String("encoding", dbcsv.DefaultEncoding.Name, "encoding to use for output")
 	flagOut := flag.String("o", "-", "output (defaults to stdout)")
 	flagRaw := flag.Bool("raw", false, "not real csv, just dump the raw data")
-	flagSheets := flagStrings()
+	flagSheets := dbcsv.FlagStrings()
 	flag.Var(flagSheets, "sheet", "each -sheet=name:SELECT will become a separate sheet on the output ods")
 	flagVerbose := flag.Bool("v", false, "verbose logging")
 	flagCall := flag.Bool("call", false, "the first argument is not the WHERE, but the PL/SQL block to be called, the followings are not the columns but the arguments")
@@ -579,16 +579,5 @@ func getColumns(rows interface{}) ([]Column, error) {
 	}
 	return cols, nil
 }
-
-func flagStrings() *stringsValue {
-	return &stringsValue{}
-}
-
-type stringsValue struct {
-	Strings []string
-}
-
-func (ss stringsValue) String() string      { return fmt.Sprintf("%v", ss.Strings) }
-func (ss *stringsValue) Set(s string) error { ss.Strings = append(ss.Strings, s); return nil }
 
 // vim: se noet fileencoding=utf-8:
