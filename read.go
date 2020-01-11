@@ -18,6 +18,7 @@ import (
 	"unicode"
 
 	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/encoding/htmlindex"
 	"golang.org/x/text/transform"
 
@@ -26,16 +27,35 @@ import (
 	errors "golang.org/x/xerrors"
 )
 
-var DefaultEncoding = encoding.Replacement
+var DefaultEncoding = NamedEncoding{Encoding: encoding.Replacement, Name: "utf-8"}
 var UnknownSheet = errors.New("unknown sheet")
+
+type NamedEncoding struct {
+	encoding.Encoding
+	Name string
+}
 
 func init() {
 	encName := os.Getenv("LANG")
 	if i := strings.IndexByte(encName, '.'); i >= 0 {
-		if enc, err := htmlindex.Get(encName[i+1:]); err == nil {
+		if enc, err := EncFromName(encName[i+1:]); err == nil {
 			DefaultEncoding = enc
 		}
 	}
+}
+func EncFromName(e string) (NamedEncoding, error) {
+	switch strings.NewReplacer("-", "", "_", "").Replace(strings.ToLower(e)) {
+	case "", "utf8":
+		return NamedEncoding{Encoding: encoding.Nop, Name: "utf-8"}, nil
+	case "iso88591":
+		return NamedEncoding{Encoding: charmap.ISO8859_1, Name: "iso-8859-1"}, nil
+	case "iso88592":
+		return NamedEncoding{Encoding: charmap.ISO8859_2, Name: "iso-8859-2"}, nil
+	}
+	if enc, err := htmlindex.Get(e); err == nil {
+		return NamedEncoding{Encoding: enc, Name: e}, nil
+	}
+	return NamedEncoding{Encoding: encoding.Nop, Name: e}, errors.Errorf("%s: %w", e, errors.New("unknown encoding"))
 }
 
 type FileType string

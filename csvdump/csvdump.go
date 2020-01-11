@@ -27,8 +27,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/text/encoding"
-	"golang.org/x/text/encoding/charmap"
 
+	"github.com/UNO-SOFT/dbcsv"
 	"github.com/UNO-SOFT/spreadsheet"
 	"github.com/UNO-SOFT/spreadsheet/ods"
 	"github.com/UNO-SOFT/spreadsheet/xlsx"
@@ -37,24 +37,7 @@ import (
 	errors "golang.org/x/xerrors"
 )
 
-var envEnc = namedEncoding{Encoding: encoding.Nop, Name: "utf-8"}
-
-type namedEncoding struct {
-	encoding.Encoding
-	Name string
-}
-
 func main() {
-	if e := os.Getenv("LANG"); e != "" {
-		if i := strings.LastIndexByte(e, '.'); i >= 0 {
-			e = e[i+1:]
-		}
-		if enc, err := encFromName(e); err != nil {
-			log.Println(err)
-		} else {
-			envEnc = enc
-		}
-	}
 	if err := Main(); err != nil {
 		log.Fatalf("%+v", err)
 	}
@@ -65,7 +48,7 @@ func Main() error {
 	flagDateFormat := flag.String("date", dateFormat, "date format, in Go notation")
 	flagSep := flag.String("sep", ";", "separator")
 	flagHeader := flag.Bool("header", true, "print header")
-	flagEnc := flag.String("encoding", envEnc.Name, "encoding to use for output")
+	flagEnc := flag.String("encoding", dbcsv.DefaultEncoding.Name, "encoding to use for output")
 	flagOut := flag.String("o", "-", "output (defaults to stdout)")
 	flagRaw := flag.Bool("raw", false, "not real csv, just dump the raw data")
 	flagSheets := flagStrings()
@@ -111,7 +94,7 @@ and dump all the columns of the cursor returned by the function.
 		}
 	}
 
-	enc, err := encFromName(*flagEnc)
+	enc, err := dbcsv.EncFromName(*flagEnc)
 	if err != nil {
 		return err
 	}
@@ -161,7 +144,7 @@ and dump all the columns of the cursor returned by the function.
 				columns = flag.Args()[2:]
 			}
 		}
-		qry := getQuery(flag.Arg(0), where, columns, envEnc)
+		qry := getQuery(flag.Arg(0), where, columns, dbcsv.DefaultEncoding)
 		queries = append(queries, qry)
 	}
 	db, err := sql.Open("godror", *flagConnect)
@@ -196,7 +179,7 @@ and dump all the columns of the cursor returned by the function.
 	if len(flagSheets.Strings) == 0 {
 		w := io.Writer(encoding.ReplaceUnsupported(enc.NewEncoder()).Writer(fh))
 		if Log != nil {
-			Log("env_encoding", envEnc.Name)
+			Log("env_encoding", dbcsv.DefaultEncoding.Name)
 		}
 
 		rows, columns, qErr := doQuery(ctx, tx, queries[0], params, *flagCall)
@@ -570,19 +553,6 @@ func csvQuote(w io.Writer, sep, s string) (int, error) {
 	}
 	m, err = w.Write([]byte{'"'})
 	return n + m, err
-}
-
-func encFromName(e string) (namedEncoding, error) {
-	switch strings.NewReplacer("-", "", "_", "").Replace(strings.ToLower(e)) {
-	case "", "utf8":
-		return namedEncoding{Encoding: encoding.Nop, Name: "utf-8"}, nil
-	case "iso88591":
-		return namedEncoding{Encoding: charmap.ISO8859_1, Name: "iso-8859-1"}, nil
-	case "iso88592":
-		return namedEncoding{Encoding: charmap.ISO8859_2, Name: "iso-8859-2"}, nil
-	default:
-		return namedEncoding{Encoding: encoding.Nop, Name: e}, errors.Errorf("%s: %w", e, errors.New("unknown encoding"))
-	}
 }
 
 func getColumns(rows interface{}) ([]Column, error) {
