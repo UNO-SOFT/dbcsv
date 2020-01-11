@@ -16,6 +16,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -138,14 +139,17 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 	var bwMu sync.Mutex
 	grp, grpCtx := errgroup.WithContext(ctx)
 	for _, qry := range queries {
-		tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-		if err != nil {
-			return err
-		}
+		qry := qry
 		grp.Go(func() error {
-			defer tx.Rollback()
 			concLimit <- struct{}{}
 			defer func() { <-concLimit }()
+
+			tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+			if err != nil {
+				return err
+			}
+			defer tx.Rollback()
+
 			i := strings.IndexByte(qry, ':')
 			name, qry := qry[:i], qry[i+1:]
 			rows, err := doQuery(grpCtx, tx, qry, *flagFetchRowCount, params)
@@ -154,9 +158,9 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 			}
 			var errS string
 			if err != nil {
-				if errors.Is(err, context.Canceled){
+				if errors.Is(err, context.Canceled) {
 					return nil
-					}
+				}
 				errS = err.Error()
 			}
 			bwMu.Lock()
@@ -181,8 +185,8 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 }
 
 type Table struct {
-	Name  string `json:"name"`
-	Error string `json:"error,omitempty"`
+	Name  string                   `json:"name"`
+	Error string                   `json:"error,omitempty"`
 	Rows  []map[string]interface{} `json:"rows"`
 }
 
@@ -224,6 +228,9 @@ func doQuery(ctx context.Context, db queryExecer, qry string, fetchRowCount int,
 		}
 		m := make(map[string]interface{}, len(vals))
 		for i := range vals {
+			if vals[i] == nil || reflect.ValueOf(vals[i]).IsZero() {
+				continue
+			}
 			m[columns[i]] = vals[i]
 		}
 		values = append(values, m)
