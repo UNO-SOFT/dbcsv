@@ -16,7 +16,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -89,13 +88,19 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 	}
 
 	queries := flag.Args()
+	if len(queries) == 0 || len(queries) == 1 && (queries[0] == "-" || queries[0] == "") {
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			queries = append(queries, scanner.Text())
+		}
+	}
 	for i, q := range queries {
 		if queries[i], err = envEnc.NewDecoder().String(q); err != nil {
 			return errors.Errorf("%q: %w", q, err)
 		}
 	}
 
-	params := make([]sql.NamedArg, 0, len(flagValues.Strings))
+	params := make([]interface{}, 0, len(flagValues.Strings))
 	for _, s := range flagValues.Strings {
 		if i := strings.IndexAny(s, "-:= \t"); i < 0 {
 			return errors.Errorf("%q does not contain a separator", s)
@@ -127,6 +132,7 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 	}
 
 	bw.WriteString("[\n")
+	first := true
 	concLimit := make(chan struct{}, *flagConcurrency)
 	enc := json.NewEncoder(bw)
 	var bwMu sync.Mutex
@@ -143,8 +149,23 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 			i := strings.IndexByte(qry, ':')
 			name, qry := qry[:i], qry[i+1:]
 			rows, err := doQuery(grpCtx, tx, qry, *flagFetchRowCount, params)
+			if err == nil && len(rows) == 0 {
+				return nil
+			}
+			var errS string
+			if err != nil {
+				if errors.Is(err, context.Canceled){
+					return nil
+					}
+				errS = err.Error()
+			}
 			bwMu.Lock()
-			if encErr := enc.Encode(Table{Name: name, Error: err, Rows: rows}); encErr != nil && err == nil {
+			if first {
+				first = false
+			} else {
+				bw.WriteByte(',')
+			}
+			if encErr := enc.Encode(Table{Name: name, Error: errS, Rows: rows}); encErr != nil && err == nil {
 				err = encErr
 			}
 			bwMu.Unlock()
@@ -154,14 +175,15 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 	if err = grp.Wait(); err != nil {
 		return err
 	}
-	bw.WriteString("\n]\n")
+	bw.WriteString("]\n")
+	bw.Flush()
 	return fh.Close()
 }
 
 type Table struct {
-	Name  string
-	Error error
-	Rows  []map[string]interface{}
+	Name  string `json:"name"`
+	Error string `json:"error,omitempty"`
+	Rows  []map[string]interface{} `json:"rows"`
 }
 
 type queryer interface {
@@ -176,11 +198,12 @@ type queryExecer interface {
 	execer
 }
 
-func doQuery(ctx context.Context, db queryExecer, qry string, fetchRowCount int, params []sql.NamedArg) ([]map[string]interface{}, error) {
+func doQuery(ctx context.Context, db queryExecer, qry string, fetchRowCount int, params []interface{}) ([]map[string]interface{}, error) {
 	if fetchRowCount <= 0 {
 		fetchRowCount = DefaultFetchRowCount
 	}
-	rows, err := db.QueryContext(ctx, qry, godror.FetchRowCount(fetchRowCount), params)
+	params = append(params, godror.FetchRowCount(fetchRowCount))
+	rows, err := db.QueryContext(ctx, qry, params...)
 	if err != nil {
 		return nil, errors.Errorf("%q: %w", qry, err)
 	}
@@ -189,19 +212,23 @@ func doQuery(ctx context.Context, db queryExecer, qry string, fetchRowCount int,
 	if err != nil {
 		return nil, err
 	}
-	vals := make([]map[string]interface{}, fetchRowCount)
+	vals := make([]interface{}, len(columns))
 	dest := make([]interface{}, len(columns))
+	for i := range vals {
+		dest[i] = &vals[i]
+	}
+	values := make([]map[string]interface{}, 0, fetchRowCount)
 	for rows.Next() {
 		if err := rows.Scan(dest...); err != nil {
-			return vals, errors.Errorf("scan into %#v: %w", dest, err)
+			return values, errors.Errorf("scan into %#v: %w", dest, err)
 		}
-		m := make(map[string]interface{}, len(dest))
-		for i := range dest {
-			m[columns[i]] = reflect.ValueOf(dest[i]).Elem().Interface()
-			vals = append(vals, m)
+		m := make(map[string]interface{}, len(vals))
+		for i := range vals {
+			m[columns[i]] = vals[i]
 		}
+		values = append(values, m)
 	}
-	return vals, rows.Err()
+	return values, rows.Close()
 }
 
 // vim: se noet fileencoding=utf-8:
