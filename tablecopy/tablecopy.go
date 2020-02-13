@@ -139,7 +139,7 @@ will execute a "SELECT * FROM Source_table@source_db WHERE F_ield=1" and an "INS
 				if err != nil {
 					return errors.Errorf("%s: %w", qry, err)
 				}
-				_, err = stmt.Exec(nil)
+				_, err = stmt.Exec(nil) //nolint: SA1019 not easy
 				stmt.Close()
 				if err != nil {
 					return err

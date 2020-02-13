@@ -248,7 +248,7 @@ ArgLoop:
 		if arg.InOut == "OUT" {
 			switch arg.Type {
 			case "DATE":
-				var t time.Time
+				var t sql.NullTime
 				st.FixParams = append(st.FixParams, sql.Out{Dest: &t})
 			case "NUMBER":
 				var f float64
@@ -282,10 +282,15 @@ func strToDate(s string) (interface{}, error) {
 	if s == "" {
 		return nil, nil
 	}
+	var nt sql.NullTime
+	var err error
 	if len(s) < 14 {
-		return time.ParseInLocation(dateFormat, s[:8], time.Local)
+		nt.Time, err = time.ParseInLocation(dateFormat, s[:8], time.Local)
+	} else {
+		nt.Time, err = time.ParseInLocation(dateTimeFormat, s, time.Local)
 	}
-	return time.ParseInLocation(dateTimeFormat, s, time.Local)
+	nt.Valid = err == nil && !nt.Time.IsZero()
+	return nt, err
 }
 func justNums(s string, maxLen int) string {
 	var i int
@@ -319,6 +324,12 @@ func deref(in []interface{}) []string {
 			out = append(out, strconv.FormatInt(*x, 10))
 		case *float64:
 			out = append(out, fmt.Sprintf("%f", *x))
+		case *sql.NullTime:
+			if x.Valid {
+				out = append(out, x.Time.Format("2006-01-02"))
+			} else {
+				out = append(out, "")
+			}
 		case *time.Time:
 			out = append(out, x.Format("2006-01-02"))
 		default:

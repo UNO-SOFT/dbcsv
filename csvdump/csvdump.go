@@ -494,11 +494,11 @@ func (vt ValTime) ConvertValue(v interface{}) (driver.Value, error) {
 	if v == nil {
 		return sql.NullTime{}, nil
 	}
-	switch v:= v.(type) {
+	switch v := v.(type) {
 	case sql.NullTime:
 		return v, nil
 	case time.Time:
-		return v, nil
+		return sql.NullTime{Valid: !v.IsZero(), Time: v}, nil
 	}
 	return nil, fmt.Errorf("unknown value %T", v)
 }
@@ -511,7 +511,7 @@ func (vt *ValTime) Scan(v interface{}) error {
 	case sql.NullTime:
 		vt.Value = v
 	case time.Time:
-		vt.Value = sql.NullTime{Valid:!v.IsZero(), Time:v}
+		vt.Value = sql.NullTime{Valid: !v.IsZero(), Time: v}
 	default:
 		return fmt.Errorf("unknown scan source %T", v)
 	}
