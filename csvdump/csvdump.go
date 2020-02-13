@@ -459,7 +459,7 @@ func (v *ValFloat) Pointer() interface{}     { return &v.Value }
 func (v *ValFloat) Scan(x interface{}) error { return v.Value.Scan(x) }
 
 type ValTime struct {
-	Value time.Time
+	Value sql.NullTime
 	Quote bool
 }
 
@@ -469,44 +469,57 @@ var (
 )
 
 func (v ValTime) String() string {
-	if v.Value.IsZero() {
+	if !v.Value.Valid || v.Value.Time.IsZero() {
 		return ""
 	}
-	if v.Value.Year() < 0 {
+	if v.Value.Time.Year() < 0 {
 		return dEnd
 	}
 	if v.Quote {
-		return `"` + v.Value.Format(dateFormat) + `"`
+		return `"` + v.Value.Time.Format(dateFormat) + `"`
 	}
-	return v.Value.Format(dateFormat)
+	return v.Value.Time.Format(dateFormat)
 }
 func (v ValTime) StringRaw() string {
-	if v.Value.IsZero() {
+	if !v.Value.Valid || v.Value.Time.IsZero() {
 		return ""
 	}
-	if v.Value.Year() < 0 {
+	if v.Value.Time.Year() < 0 {
 		return dEnd
 	}
-	return v.Value.Format(dateFormat)
+	return v.Value.Time.Format(dateFormat)
 }
 
 func (vt ValTime) ConvertValue(v interface{}) (driver.Value, error) {
 	if v == nil {
-		return time.Time{}, nil
+		return sql.NullTime{}, nil
 	}
-	t, _ := v.(time.Time)
-	return t, nil
+	switch v:= v.(type) {
+	case sql.NullTime:
+		return v, nil
+	case time.Time:
+		return v, nil
+	}
+	return nil, fmt.Errorf("unknown value %T", v)
 }
 func (vt *ValTime) Scan(v interface{}) error {
 	if v == nil {
-		vt.Value = time.Time{}
+		vt.Value = sql.NullTime{}
 		return nil
 	}
-	t, _ := v.(time.Time)
-	vt.Value = t
+	switch v := v.(type) {
+	case sql.NullTime:
+		vt.Value = v
+	case time.Time:
+		vt.Value = sql.NullTime{Valid:!v.IsZero(), Time:v}
+	default:
+		return fmt.Errorf("unknown scan source %T", v)
+	}
 	return nil
 }
 func (v *ValTime) Pointer() interface{} { return v }
+
+var typeOfTime, typeOfNullTime = reflect.TypeOf(time.Time{}), reflect.TypeOf(sql.NullTime{})
 
 func getColConverter(typ reflect.Type, sep string) stringer {
 	switch typ.Kind() {
@@ -518,7 +531,7 @@ func getColConverter(typ reflect.Type, sep string) stringer {
 		return &ValInt{}
 	}
 	switch typ {
-	case reflect.TypeOf(time.Time{}):
+	case typeOfTime, typeOfNullTime:
 		return &ValTime{Quote: sep != "" && strings.Contains(dateFormat, sep)}
 	}
 	return &ValString{Sep: sep}
