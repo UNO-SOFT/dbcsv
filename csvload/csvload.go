@@ -637,15 +637,16 @@ func (t Type) String() string {
 
 func (c Column) FromString(ss []string) (interface{}, error) {
 	if c.DataType == "DATE" || c.Type == Date {
-		res := make([]time.Time, len(ss))
+		res := make([]sql.NullTime, len(ss))
 		for i, s := range ss {
 			if s == "" {
 				continue
 			}
-			var err error
-			if res[i], err = time.ParseInLocation(dateFormat[:len(s)], s, time.Local); err != nil {
+			t, err := time.ParseInLocation(dateFormat[:len(s)], s, time.Local)
+			if err != nil {
 				return res, errors.Errorf("%d. %q: %w", i, s, err)
 			}
+			res[i] = sql.NullTime{Valid: true, Time: t}
 		}
 		return res, nil
 	}
