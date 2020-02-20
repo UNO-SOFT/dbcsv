@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"runtime"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -26,7 +27,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	errors "golang.org/x/xerrors"
 
-	_ "github.com/godror/godror"
+	"github.com/godror/godror"
 )
 
 func main() {
@@ -36,6 +37,7 @@ func main() {
 }
 
 var dateFormat = "2006-01-02 15:04:05"
+var xlsEpoch = time.Date(1899, 12, 30, 0, 0, 0, 0, time.Local)
 
 var ForceString bool
 
@@ -102,10 +104,13 @@ func Main() error {
 		}
 	}
 
-	db, err := sql.Open("godror", *flagConnect)
+	connector, err := godror.NewConnector(*flagConnect, godror.NewSessionIniter(map[string]string{
+		"NLS_NUMERIC_CHARACTERS": ". ",
+	}))
 	if err != nil {
 		return errors.Errorf("%s: %w", *flagConnect, err)
 	}
+	db := sql.OpenDB(connector)
 	defer db.Close()
 
 	db.SetMaxIdleConns(*flagConcurrency)
@@ -182,9 +187,9 @@ func Main() error {
 			buf.Reset()
 			for j := range cols {
 				if j != 0 {
-					buf.Write([]byte{',', ' '})
+					buf.WriteString(", ")
 				}
-				fmt.Fprintf(&buf, ":%d", j+1)
+				buf.WriteString("%s")
 			}
 			pattern += buf.String() + ")\n"
 		}
@@ -200,7 +205,7 @@ func Main() error {
 				continue
 			}
 
-			vals := make([]string, len(cols))
+			vals := make([]interface{}, len(cols))
 			for j, s := range row.Values {
 				buf.Reset()
 				col := cols[j]
@@ -213,13 +218,17 @@ func Main() error {
 					d := dRepl.Replace(s)
 					if len(d) == 6 {
 						d = "20" + d
+					} else if len(d) < 8 {
+						if i, err := strconv.Atoi(d); err == nil {
+							d = xlsEpoch.AddDate(0, 0, i).Format("20060102")
+						}
 					}
 					buf.WriteString(d)
 					buf.WriteString("','YYYYMMDD')")
 				}
 				vals[j] = buf.String()
 			}
-			fmt.Printf(pattern, vals)
+			fmt.Printf(pattern, vals...)
 		}
 		fmt.Println("SELECT 1 FROM DUAL;")
 		return nil
@@ -473,15 +482,21 @@ func typeOf(s string) Type {
 	}
 	return String
 }
+func tableSplitOwner(tbl string) (string, string) {
+	if i := strings.IndexByte(tbl, '.'); i >= 0 {
+		return tbl[:i], tbl[i+1:]
+	}
+	return "", tbl
+}
 
 func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.Row, truncate bool, tablespace, copyTable string) ([]Column, error) {
 	tbl = strings.ToUpper(tbl)
-	var owner, ownerDot string
-	if i := strings.IndexByte(tbl, '.'); i >= 0 {
-		owner, tbl = tbl[:i], tbl[i+1:]
+	owner, tbl := tableSplitOwner(strings.ToUpper(tbl))
+	var ownerDot string
+	if owner != "" {
 		ownerDot = owner + "."
 	}
-	qry := "SELECT COUNT(0) FROM all_tables WHERE UPPER(table_name) = :1 AND owner = NVL(:2, owner)"
+	qry := "SELECT COUNT(0) FROM all_tables WHERE UPPER(table_name) = :1 AND owner = NVL(:2, SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA'))"
 	var n int64
 	var cols []Column
 	if err := db.QueryRowContext(ctx, qry, tbl, owner).Scan(&n); err != nil {
@@ -505,7 +520,7 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
 		}
 	} else if n == 0 && copyTable == "" {
 		row := <-rows
-		log.Printf("row: %q", row.Values)
+		log.Printf("row: %v", row.Values)
 		cols = make([]Column, len(row.Values))
 		for i, v := range row.Values {
 			v = strings.Map(func(r rune) rune {
@@ -587,7 +602,7 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
 	}
 
 	qry = `SELECT column_name, data_type, NVL(data_length, 0), NVL(data_precision, 0), NVL(data_scale, 0), nullable
-  FROM all_tab_cols WHERE table_name = :1 AND owner = NVL(:2, owner)
+  FROM all_tab_cols WHERE table_name = :1 AND owner = NVL(:2, SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA'))
   ORDER BY column_id`
 	tRows, err := db.QueryContext(ctx, qry, tbl, owner)
 	if err != nil {
@@ -642,6 +657,12 @@ func (c Column) FromString(ss []string) (interface{}, error) {
 			if s == "" {
 				continue
 			}
+			if len(s) < 8 {
+				if j, err := strconv.Atoi(s); err == nil {
+					res[i] = sql.NullTime{Valid: true, Time: xlsEpoch.AddDate(0, 0, j)}
+					continue
+				}
+			}
 			t, err := time.ParseInLocation(dateFormat[:len(s)], s, time.Local)
 			if err != nil {
 				return res, errors.Errorf("%d. %q: %w", i, s, err)
@@ -694,9 +715,10 @@ func (c Column) FromString(ss []string) (interface{}, error) {
 }
 
 func getColumns(ctx context.Context, db *sql.DB, tbl string) ([]Column, error) {
+	owner, tbl := tableSplitOwner(tbl)
 	// TODO(tgulacsi): this is Oracle-specific!
-	const qry = "SELECT column_name, data_type, data_length, data_precision, data_scale, nullable FROM all_tab_cols WHERE table_name = UPPER(:1) ORDER BY column_id"
-	rows, err := db.QueryContext(ctx, qry, tbl)
+	const qry = "SELECT column_name, data_type, data_length, data_precision, data_scale, nullable FROM all_tab_cols WHERE table_name = UPPER(:1) AND owner = NVL(:2, SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')) ORDER BY column_id"
+	rows, err := db.QueryContext(ctx, qry, tbl, owner)
 	if err != nil {
 		return nil, errors.Errorf("%s: %w", qry, err)
 	}

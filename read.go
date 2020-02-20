@@ -248,7 +248,7 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 	}
 	sheetName := xlFile.GetSheetName(sheetIndex)
 	if sheetName == "" {
-		return errors.Errorf("%d: %w", sheetIndex, UnknownSheet)
+		return errors.Errorf("%d (only: %v): %w", sheetIndex, xlFile.GetSheetMap(), UnknownSheet)
 	}
 	n := 0
 	var need map[int]bool
