@@ -24,6 +24,8 @@ import (
 	"unicode"
 
 	"github.com/UNO-SOFT/dbcsv"
+
+	"github.com/peterbourgon/ff/v2/ffcli"
 	"golang.org/x/sync/errgroup"
 	errors "golang.org/x/xerrors"
 
@@ -43,6 +45,14 @@ var ForceString bool
 
 const chunkSize = 1024
 
+type config struct {
+	dbcsv.Config
+	JustPrint, Truncate bool
+	Tablespace, Copy    string
+	Concurrency         int
+	WriteHeapProf       func()
+}
+
 func Main() error {
 	encName := os.Getenv("LANG")
 	if i := strings.IndexByte(encName, '.'); i >= 0 {
@@ -51,31 +61,52 @@ func Main() error {
 		encName = "UTF-8"
 	}
 
-	cfg := &dbcsv.Config{}
-	flagConnect := flag.String("connect", os.Getenv("DB_ID"), "database to connect to")
-	flag.StringVar(&cfg.Charset, "charset", encName, "input charset")
-	flagTruncate := flag.Bool("truncate", false, "truncate table")
-	flagTablespace := flag.String("tablespace", "DATA", "tablespace to create table in")
-	flag.StringVar(&cfg.Delim, "delim", ";", "CSV separator")
-	flagConcurrency := flag.Int("concurrency", 8, "concurrency")
-	flag.StringVar(&dateFormat, "date", dateFormat, "date format, in Go notation")
-	flag.IntVar(&cfg.Skip, "skip", 0, "skip rows")
-	flag.IntVar(&cfg.Sheet, "sheet", 0, "sheet of spreadsheet")
-	flag.StringVar(&cfg.ColumnsString, "columns", "", "columns, comma separated indexes")
-	flagFields := flag.String("fields", "", "target fields, comma separated names")
-	flag.BoolVar(&ForceString, "force-string", false, "force all columns to be VARCHAR2")
-	flagMemProf := flag.String("memprofile", "", "file to output memory profile to")
-	flagCPUProf := flag.String("cpuprofile", "", "file to output CPU profile to")
-	flagJustPrint := flag.Bool("just-print", false, "just print the INSERTs")
-	flagCopy := flag.String("copy", "", "copy this table's structure")
+	var cfg config
+	fs := flag.NewFlagSet("load", flag.ContinueOnError)
+	flagConnect := fs.String("connect", os.Getenv("DB_ID"), "database to connect to")
+	fs.StringVar(&cfg.Charset, "charset", encName, "input charset")
+	fs.BoolVar(&cfg.Truncate, "truncate", false, "truncate table")
+	fs.StringVar(&cfg.Tablespace, "tablespace", "DATA", "tablespace to create table in")
+	fs.StringVar(&cfg.Delim, "delim", ";", "CSV separator")
+	fs.IntVar(&cfg.Concurrency, "concurrency", 8, "concurrency")
+	fs.StringVar(&dateFormat, "date", dateFormat, "date format, in Go notation")
+	fs.IntVar(&cfg.Skip, "skip", 0, "skip rows")
+	fs.IntVar(&cfg.Sheet, "sheet", 0, "sheet of spreadsheet")
+	fs.StringVar(&cfg.ColumnsString, "columns", "", "columns, comma separated indexes")
+	flagFields := fs.String("fields", "", "target fields, comma separated names")
+	fs.BoolVar(&ForceString, "force-string", false, "force all columns to be VARCHAR2")
+	flagMemProf := fs.String("memprofile", "", "file to output memory profile to")
+	flagCPUProf := fs.String("cpuprofile", "", "file to output CPU profile to")
+	fs.BoolVar(&cfg.JustPrint, "just-print", false, "just print the INSERTs")
+	fs.StringVar(&cfg.Copy, "copy", "", "copy this table's structure")
 	if *flagConnect == "" {
 		*flagConnect = os.Getenv("BRUNO_ID")
 	}
-	flag.Parse()
+	loadCmd := ffcli.Command{Name: "load", FlagSet: fs,
+		Exec: func(ctx context.Context, args []string) error {
+			if len(args) != 2 {
+				return errors.New("Need two args: the table and the source.")
+			}
+			connector, err := godror.NewConnector(*flagConnect, godror.NewSessionIniter(map[string]string{
+				"NLS_NUMERIC_CHARACTERS": ". ",
+			}))
+			if err != nil {
+				return errors.Errorf("%s: %w", *flagConnect, err)
+			}
+			db := sql.OpenDB(connector)
+			defer db.Close()
 
-	if flag.NArg() != 2 {
-		log.Fatal("Need two args: the table and the source.")
+			db.SetMaxIdleConns(cfg.Concurrency)
+			fields := strings.FieldsFunc(*flagFields, func(r rune) bool { return r == ',' || r == ';' || r == ' ' })
+
+			return cfg.load(ctx, db, flag.Arg(0), flag.Arg(1), fields)
+		},
 	}
+
+	if err := loadCmd.Parse(os.Args[1:]); err != nil {
+		return err
+	}
+
 	if *flagCPUProf != "" {
 		f, err := os.Create(*flagCPUProf)
 		if err != nil {
@@ -87,14 +118,13 @@ func Main() error {
 		defer pprof.StopCPUProfile()
 	}
 
-	writeHeapProf := func() {}
 	if *flagMemProf != "" {
 		f, err := os.Create(*flagMemProf)
 		if err != nil {
 			log.Fatal("could not create memory profile: ", err)
 		}
 		defer f.Close()
-		writeHeapProf = func() {
+		cfg.WriteHeapProf = func() {
 			log.Println("writeHeapProf")
 			f.Seek(0, 0)
 			runtime.GC() // get up-to-date statistics
@@ -104,25 +134,14 @@ func Main() error {
 		}
 	}
 
-	connector, err := godror.NewConnector(*flagConnect, godror.NewSessionIniter(map[string]string{
-		"NLS_NUMERIC_CHARACTERS": ". ",
-	}))
-	if err != nil {
-		return errors.Errorf("%s: %w", *flagConnect, err)
-	}
-	db := sql.OpenDB(connector)
-	defer db.Close()
+	return loadCmd.Run(context.Background())
+}
 
-	db.SetMaxIdleConns(*flagConcurrency)
+func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields []string) error {
+	tbl = strings.ToUpper(tbl)
+	tblFullInsert := strings.HasPrefix(tbl, "INSERT INTO ")
 
-	tbl := strings.ToUpper(flag.Arg(0))
-	var fields []string
-	var tblFullInsert bool
-	if tblFullInsert = strings.HasPrefix(tbl, "INSERT INTO "); !tblFullInsert {
-		fields = strings.FieldsFunc(*flagFields, func(r rune) bool { return r == ',' || r == ';' || r == ' ' })
-	}
-	src := flag.Arg(1)
-
+	var err error
 	if ForceString {
 		err = cfg.OpenVolatile(flag.Arg(1))
 	} else {
@@ -150,7 +169,7 @@ func Main() error {
 		)
 	}()
 
-	if *flagJustPrint {
+	if cfg.JustPrint {
 		fmt.Println("INSERT ALL")
 		cols, err := getColumns(ctx, db, tbl)
 		if err != nil {
@@ -245,7 +264,7 @@ func Main() error {
 			columns = append(columns, Column{Name: fmt.Sprintf("%d", i+1)})
 		}
 	} else {
-		columns, err = CreateTable(ctx, db, tbl, rows, *flagTruncate, *flagTablespace, *flagCopy)
+		columns, err = CreateTable(ctx, db, tbl, rows, cfg.Truncate, cfg.Tablespace, cfg.Copy)
 		cancel()
 		if err != nil {
 			return err
@@ -281,11 +300,11 @@ func Main() error {
 		Rows  [][]string
 		Start int64
 	}
-	rowsCh := make(chan rowsType, *flagConcurrency)
+	rowsCh := make(chan rowsType, cfg.Concurrency)
 	chunkPool := sync.Pool{New: func() interface{} { z := make([][]string, 0, chunkSize); return &z }}
 
 	var inserted int64
-	for i := 0; i < *flagConcurrency; i++ {
+	for i := 0; i < cfg.Concurrency; i++ {
 		grp.Go(func() error {
 			tx, txErr := db.BeginTx(ctx, nil)
 			if txErr != nil {
@@ -402,8 +421,8 @@ func Main() error {
 			if !headerSeen {
 				headerSeen = true
 				return nil
-			} else if n%10000 == 0 {
-				writeHeapProf()
+			} else if n%10000 == 0 && cfg.WriteHeapProf != nil {
+				cfg.WriteHeapProf()
 			}
 			allEmpty := true
 			for i, s := range row.Values {
