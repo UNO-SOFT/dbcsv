@@ -126,7 +126,7 @@ Usage:
 		}
 	}()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := dbcsv.Wrap(context.Background())
 	defer cancel()
 	go func(rows chan<- dbcsv.Row) {
 		defer close(rows)

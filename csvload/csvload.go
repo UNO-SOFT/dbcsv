@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"runtime"
 	"runtime/pprof"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -41,16 +42,14 @@ func main() {
 var dateFormat = "2006-01-02 15:04:05"
 var xlsEpoch = time.Date(1899, 12, 30, 0, 0, 0, 0, time.Local)
 
-var ForceString bool
-
 const chunkSize = 1024
 
 type config struct {
 	dbcsv.Config
-	JustPrint, Truncate bool
-	Tablespace, Copy    string
-	Concurrency         int
-	WriteHeapProf       func()
+	ForceString, JustPrint, Truncate bool
+	Tablespace, Copy                 string
+	Concurrency                      int
+	WriteHeapProf                    func()
 }
 
 func Main() error {
@@ -64,19 +63,10 @@ func Main() error {
 	var cfg config
 	fs := flag.NewFlagSet("load", flag.ContinueOnError)
 	flagConnect := fs.String("connect", os.Getenv("DB_ID"), "database to connect to")
-	fs.StringVar(&cfg.Charset, "charset", encName, "input charset")
 	fs.BoolVar(&cfg.Truncate, "truncate", false, "truncate table")
 	fs.StringVar(&cfg.Tablespace, "tablespace", "DATA", "tablespace to create table in")
-	fs.StringVar(&cfg.Delim, "delim", ";", "CSV separator")
-	fs.IntVar(&cfg.Concurrency, "concurrency", 8, "concurrency")
-	fs.StringVar(&dateFormat, "date", dateFormat, "date format, in Go notation")
-	fs.IntVar(&cfg.Skip, "skip", 0, "skip rows")
-	fs.IntVar(&cfg.Sheet, "sheet", 0, "sheet of spreadsheet")
-	fs.StringVar(&cfg.ColumnsString, "columns", "", "columns, comma separated indexes")
 	flagFields := fs.String("fields", "", "target fields, comma separated names")
-	fs.BoolVar(&ForceString, "force-string", false, "force all columns to be VARCHAR2")
-	flagMemProf := fs.String("memprofile", "", "file to output memory profile to")
-	flagCPUProf := fs.String("cpuprofile", "", "file to output CPU profile to")
+	fs.BoolVar(&cfg.ForceString, "force-string", false, "force all columns to be VARCHAR2")
 	fs.BoolVar(&cfg.JustPrint, "just-print", false, "just print the INSERTs")
 	fs.StringVar(&cfg.Copy, "copy", "", "copy this table's structure")
 	if *flagConnect == "" {
@@ -103,7 +93,44 @@ func Main() error {
 		},
 	}
 
-	if err := loadCmd.Parse(os.Args[1:]); err != nil {
+	sheetCmd := ffcli.Command{Name: "sheet",
+		Exec: func(ctx context.Context, args []string) error {
+			if err := cfg.Open(args[0]); err != nil {
+				return err
+			}
+			defer cfg.Close()
+			m, err := cfg.ReadSheets(ctx)
+			if err != nil {
+				return err
+			}
+			keys := make([]int, 0, len(m))
+			for k := range m {
+				keys = append(keys, k)
+			}
+			sort.Ints(keys)
+			for _, k := range keys {
+				fmt.Printf("%d\t%s\n", k, m[k])
+			}
+			return nil
+		},
+	}
+
+	fs = flag.NewFlagSet("csvload", flag.ContinueOnError)
+	fs.StringVar(&cfg.Charset, "charset", encName, "input charset")
+	fs.StringVar(&cfg.Delim, "delim", ";", "CSV separator")
+	fs.IntVar(&cfg.Concurrency, "concurrency", 8, "concurrency")
+	fs.StringVar(&dateFormat, "date", dateFormat, "date format, in Go notation")
+	fs.IntVar(&cfg.Skip, "skip", 0, "skip rows")
+	fs.IntVar(&cfg.Sheet, "sheet", 0, "sheet of spreadsheet")
+	fs.StringVar(&cfg.ColumnsString, "columns", "", "columns, comma separated indexes")
+	flagMemProf := fs.String("memprofile", "", "file to output memory profile to")
+	flagCPUProf := fs.String("cpuprofile", "", "file to output CPU profile to")
+	app := ffcli.Command{Name: "csvload", FlagSet: fs, ShortUsage: "load from csv/xls/ods into database table",
+		Exec:        loadCmd.Exec,
+		Subcommands: []*ffcli.Command{&loadCmd, &sheetCmd},
+	}
+
+	if err := app.Parse(os.Args[1:]); err != nil {
 		return err
 	}
 
@@ -134,7 +161,9 @@ func Main() error {
 		}
 	}
 
-	return loadCmd.Run(context.Background())
+	ctx, cancel := dbcsv.Wrap(context.Background())
+	defer cancel()
+	return app.Run(ctx)
 }
 
 func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields []string) error {
@@ -142,10 +171,10 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	tblFullInsert := strings.HasPrefix(tbl, "INSERT INTO ")
 
 	var err error
-	if ForceString {
-		err = cfg.OpenVolatile(flag.Arg(1))
+	if cfg.ForceString {
+		err = cfg.OpenVolatile(src)
 	} else {
-		err = cfg.Open(flag.Arg(1))
+		err = cfg.Open(src)
 	}
 	if err != nil {
 		return err
@@ -264,7 +293,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 			columns = append(columns, Column{Name: fmt.Sprintf("%d", i+1)})
 		}
 	} else {
-		columns, err = CreateTable(ctx, db, tbl, rows, cfg.Truncate, cfg.Tablespace, cfg.Copy)
+		columns, err = CreateTable(ctx, db, tbl, rows, cfg.Truncate, cfg.Tablespace, cfg.Copy, cfg.ForceString)
 		cancel()
 		if err != nil {
 			return err
@@ -463,8 +492,8 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	return err
 }
 
-func typeOf(s string) Type {
-	if ForceString {
+func typeOf(s string, forceString bool) Type {
+	if forceString {
 		return String
 	}
 
@@ -508,7 +537,7 @@ func tableSplitOwner(tbl string) (string, string) {
 	return "", tbl
 }
 
-func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.Row, truncate bool, tablespace, copyTable string) ([]Column, error) {
+func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.Row, truncate bool, tablespace, copyTable string, forceString bool) ([]Column, error) {
 	tbl = strings.ToUpper(tbl)
 	owner, tbl := tableSplitOwner(strings.ToUpper(tbl))
 	var ownerDot string
@@ -570,7 +599,7 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
 			}
 			cols[i].Name = v
 		}
-		if ForceString {
+		if forceString {
 			for i := range cols {
 				cols[i].Type = String
 			}
@@ -583,7 +612,7 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
 				if cols[i].Type == String {
 					continue
 				}
-				typ := typeOf(v)
+				typ := typeOf(v, forceString)
 				if cols[i].Type == Unknown {
 					cols[i].Type = typ
 				} else if typ != cols[i].Type {

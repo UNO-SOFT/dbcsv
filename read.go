@@ -233,6 +233,38 @@ func (cfg *Config) ReadRows(ctx context.Context, fn func(string, Row) error) (er
 	return ReadCSV(ctx, func(row Row) error { return fn(cfg.fileName, row) }, r, cfg.Delim, columns, cfg.Skip)
 }
 
+func (cfg *Config) ReadSheets(ctx context.Context) (map[int]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if cfg.permanent {
+		if _, err := cfg.file.Seek(0, 0); err != nil {
+			return nil, err
+		}
+	}
+	switch cfg.typ {
+	case Xls:
+		wb, err := xls.Open(cfg.fileName, cfg.Charset)
+		if err != nil {
+			return nil, errors.Errorf("open %q: %w", cfg.fileName, err)
+		}
+		n := wb.NumSheets()
+		m := make(map[int]string, n)
+		for i := 0; i < n; i++ {
+			m[i] = wb.GetSheet(i).Name
+		}
+		return m, nil
+	case XlsX:
+		xlFile, err := excelize.OpenFile(cfg.fileName)
+		if err != nil {
+			return nil, err
+		}
+		return xlFile.GetSheetMap(), nil
+	}
+	// CSV
+	return map[int]string{1: cfg.fileName}, nil
+}
+
 const (
 	DateFormat     = "20060102"
 	DateTimeFormat = "20060102150405"

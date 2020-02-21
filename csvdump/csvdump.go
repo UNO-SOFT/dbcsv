@@ -152,7 +152,7 @@ and dump all the columns of the cursor returned by the function.
 		return errors.Errorf("%s: %w", *flagConnect, err)
 	}
 	defer db.Close()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := dbcsv.Wrap(context.Background())
 	defer cancel()
 
 	fh := os.Stdout
