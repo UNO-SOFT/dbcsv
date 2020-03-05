@@ -89,7 +89,7 @@ func Main() error {
 			db.SetMaxIdleConns(cfg.Concurrency)
 			fields := strings.FieldsFunc(*flagFields, func(r rune) bool { return r == ',' || r == ';' || r == ' ' })
 
-			return cfg.load(ctx, db, flag.Arg(0), flag.Arg(1), fields)
+			return cfg.load(ctx, db, args[0], args[1], fields)
 		},
 	}
 
@@ -130,8 +130,14 @@ func Main() error {
 		Subcommands: []*ffcli.Command{&loadCmd, &sheetCmd},
 	}
 
-	if err := app.Parse(os.Args[1:]); err != nil {
-		return err
+	args := os.Args[1:]
+	if err := app.Parse(args); err != nil {
+		if len(args) == 0 {
+			return err
+		}
+		if err = app.Parse(append(append(make([]string, 0, 1+len(args)), "load"), args...)); err != nil {
+			return err
+		}
 	}
 
 	if *flagCPUProf != "" {
@@ -167,6 +173,9 @@ func Main() error {
 }
 
 func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields []string) error {
+	if tbl == "" {
+		panic("empty table")
+	}
 	tbl = strings.ToUpper(tbl)
 	tblFullInsert := strings.HasPrefix(tbl, "INSERT INTO ")
 
@@ -531,14 +540,18 @@ func typeOf(s string, forceString bool) Type {
 	return String
 }
 func tableSplitOwner(tbl string) (string, string) {
+	if tbl == "" {
+		panic("empty tabl name")
+	}
+	log.Printf("tableSplitOwner(%q)", tbl)
 	if i := strings.IndexByte(tbl, '.'); i >= 0 {
+		log.Println(i)
 		return tbl[:i], tbl[i+1:]
 	}
 	return "", tbl
 }
 
 func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.Row, truncate bool, tablespace, copyTable string, forceString bool) ([]Column, error) {
-	tbl = strings.ToUpper(tbl)
 	owner, tbl := tableSplitOwner(strings.ToUpper(tbl))
 	var ownerDot string
 	if owner != "" {
@@ -763,7 +776,7 @@ func (c Column) FromString(ss []string) (interface{}, error) {
 }
 
 func getColumns(ctx context.Context, db *sql.DB, tbl string) ([]Column, error) {
-	owner, tbl := tableSplitOwner(tbl)
+	owner, tbl := tableSplitOwner(strings.ToUpper(tbl))
 	// TODO(tgulacsi): this is Oracle-specific!
 	const qry = "SELECT column_name, data_type, data_length, data_precision, data_scale, nullable FROM all_tab_cols WHERE table_name = UPPER(:1) AND owner = NVL(:2, SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')) ORDER BY column_id"
 	rows, err := db.QueryContext(ctx, qry, tbl, owner)
