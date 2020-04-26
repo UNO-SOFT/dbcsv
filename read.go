@@ -300,7 +300,7 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 		if i <= skip {
 			continue
 		}
-		row, err := rows.Columns()
+		raw, row, err := rows.RawColumns(false)
 		if err != nil {
 			return err
 		}
@@ -311,6 +311,32 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
+		}
+		xfs := xlFile.Styles.CellXfs.Xf
+		var token struct{}
+		dateFmts := make(map[int]struct{}, 5+len(xlFile.Styles.NumFmts.NumFmt))
+		dateFmts[14], dateFmts[15], dateFmts[16], dateFmts[17], dateFmts[22] = token, token, token, token, token
+		for _, nf := range xlFile.Styles.NumFmts.NumFmt {
+			if strings.Contains(nf.FormatCode, "yy") {
+				dateFmts[nf.NumFmtID] = token
+			}
+		}
+		for j := range raw {
+			k := raw[j].S
+			if !(0 <= k && k < len(xfs)) {
+				continue
+			}
+			if _, ok := dateFmts[xfs[k].NumFmtID]; ok {
+				f, err := strconv.ParseFloat(raw[j].V, 32)
+				if err != nil {
+					return errors.Errorf("%d:%d.ParseFloat(%q): %w", i, j+1, raw[j].V)
+				}
+				t, err := xlFile.ExcelDateToTime(f)
+				if err != nil {
+					return errors.Errorf("%d:%d.ExcelDateToTime(%f): %w", i, j+1, f)
+				}
+				row[j] = t.Format("2006-01-02")
+			}
 		}
 		if err := fn(sheetName, Row{Line: n, Values: row}); err != nil {
 			return err

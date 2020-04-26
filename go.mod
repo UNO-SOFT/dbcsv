@@ -15,3 +15,5 @@ require (
 )
 
 go 1.13
+
+replace github.com/360EntSecGroup-Skylar/excelize/v2 v2.1.0 => github.com/UNO-SOFT/excelize/v2 v2.2.0-alpha.1
