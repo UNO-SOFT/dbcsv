@@ -77,12 +77,12 @@ func Main() error {
 			if len(args) != 2 {
 				return errors.New("Need two args: the table and the source.")
 			}
-			connector, err := godror.NewConnector(*flagConnect, godror.NewSessionIniter(map[string]string{
-				"NLS_NUMERIC_CHARACTERS": ". ",
-			}))
+			P, err := godror.ParseConnString(*flagConnect)
 			if err != nil {
-				return errors.Errorf("%s: %w", *flagConnect, err)
+				return fmt.Errorf("%q: %w", *flagConnect, err)
 			}
+			P.SetSessionParamOnInit("NLS_NUMERIC_CHARACTERS", ". ")
+			connector := godror.NewConnector(P)
 			db := sql.OpenDB(connector)
 			defer db.Close()
 
