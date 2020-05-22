@@ -58,6 +58,9 @@ func dbExec(db *sql.DB, fun string, fixParams [][2]string, retOk int64, rows <-c
 			}
 		}
 
+		if len(row.Values) > len(st.Converters) {
+			log.Printf("values=%d converters=%d params=%d", len(row.Values), len(st.Converters), st.ParamCount)
+		}
 		values = values[:startIdx]
 		for i, s := range row.Values {
 			conv := st.Converters[i]
