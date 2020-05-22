@@ -329,11 +329,11 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 			if _, ok := dateFmts[xfs[k].NumFmtID]; ok {
 				f, err := strconv.ParseFloat(raw[j].V, 32)
 				if err != nil {
-					return errors.Errorf("%d:%d.ParseFloat(%q): %w", i, j+1, raw[j].V)
+					return errors.Errorf("%d:%d.ParseFloat(%q): %w", i, j+1, raw[j].V, err)
 				}
 				t, err := xlFile.ExcelDateToTime(f)
 				if err != nil {
-					return errors.Errorf("%d:%d.ExcelDateToTime(%f): %w", i, j+1, f)
+					return errors.Errorf("%d:%d.ExcelDateToTime(%f): %w", i, j+1, f, err)
 				}
 				row[j] = t.Format("2006-01-02")
 			}
