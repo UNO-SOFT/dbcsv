@@ -566,7 +566,9 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
 	if n > 0 && truncate {
 		qry = `TRUNCATE TABLE ` + ownerDot + tbl
 		if _, err := db.ExecContext(ctx, qry); err != nil {
-			return cols, errors.Errorf("%s: %w", qry, err)
+			if _, delErr := db.ExecContext(ctx, "DELETE FROM "+ownerDot+tbl); delErr != nil {
+				return cols, errors.Errorf("%s: %w", qry, err)
+			}
 		}
 	}
 
