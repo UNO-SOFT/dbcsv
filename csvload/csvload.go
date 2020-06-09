@@ -192,24 +192,25 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 
 	rows := make(chan dbcsv.Row)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
+	defCtx, defCancel := context.WithCancel(ctx)
+	grp, grpCtx := errgroup.WithContext(defCtx)
+	grp.Go(func() error {
 		defer close(rows)
-		cfg.ReadRows(ctx,
+		return cfg.ReadRows(grpCtx,
 			func(_ string, row dbcsv.Row) error {
 				select {
-				case <-ctx.Done():
-					return ctx.Err()
+				case <-grpCtx.Done():
+					return grpCtx.Err()
 				case rows <- row:
 				}
 				return nil
 			},
 		)
-	}()
+	})
 
 	if cfg.JustPrint {
 		fmt.Println("INSERT ALL")
-		cols, err := getColumns(ctx, db, tbl)
+		cols, err := getColumns(defCtx, db, tbl)
 		if err != nil {
 			return err
 		}
@@ -302,8 +303,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 			columns = append(columns, Column{Name: fmt.Sprintf("%d", i+1)})
 		}
 	} else {
-		columns, err = CreateTable(ctx, db, tbl, rows, cfg.Truncate, cfg.Tablespace, cfg.Copy, cfg.ForceString)
-		cancel()
+		columns, err = CreateTable(defCtx, db, tbl, rows, cfg.Truncate, cfg.Tablespace, cfg.Copy, cfg.ForceString)
 		if err != nil {
 			return err
 		}
@@ -327,12 +327,14 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		qry = buf.String()
 	}
 	log.Println(qry)
+	defCancel()
+	if err = grp.Wait(); err != context.Canceled {
+		return err
+	}
 
 	start := time.Now()
 
-	ctx, cancel = context.WithCancel(context.Background())
-	defer cancel()
-	grp, ctx := errgroup.WithContext(ctx)
+	grp, grpCtx = errgroup.WithContext(ctx)
 
 	type rowsType struct {
 		Rows  [][]string
@@ -344,7 +346,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	var inserted int64
 	for i := 0; i < cfg.Concurrency; i++ {
 		grp.Go(func() error {
-			tx, txErr := db.BeginTx(ctx, nil)
+			tx, txErr := db.BeginTx(grpCtx, nil)
 			if txErr != nil {
 				return txErr
 			}
@@ -359,7 +361,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 
 			for rs := range rowsCh {
 				chunk := rs.Rows
-				if err = ctx.Err(); err != nil {
+				if err = grpCtx.Err(); err != nil {
 					return err
 				}
 				if len(chunk) == 0 {
@@ -447,11 +449,13 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	}
 
 	var n int64
+
 	var headerSeen bool
 	chunk := (*(chunkPool.Get().(*[][]string)))[:0]
-	if err = cfg.ReadRows(ctx,
-		func(_ string, row dbcsv.Row) error {
-			if err = ctx.Err(); err != nil {
+	if err = cfg.ReadRows(grpCtx,
+		func(fn string, row dbcsv.Row) error {
+			if err = grpCtx.Err(); err != nil {
+				log.Printf("Grp: %+v", err)
 				chunk = chunk[:0]
 				return err
 			}
@@ -478,8 +482,9 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 			select {
 			case rowsCh <- rowsType{Rows: chunk, Start: n}:
 				n += int64(len(chunk))
-			case <-ctx.Done():
-				return ctx.Err()
+			case <-grpCtx.Done():
+				log.Println("CTX:", grpCtx.Err())
+				return grpCtx.Err()
 			}
 
 			chunk = (*chunkPool.Get().(*[][]string))[:0]
@@ -495,7 +500,9 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	}
 	close(rowsCh)
 
-	err = grp.Wait()
+	if err = grp.Wait(); err != nil {
+		log.Printf("ERROR: %+v", err)
+	}
 	dur := time.Since(start)
 	log.Printf("Read %d, inserted %d rows from %q to %q in %s.", n, inserted, src, tbl, dur)
 	return err
@@ -545,7 +552,6 @@ func tableSplitOwner(tbl string) (string, string) {
 	}
 	log.Printf("tableSplitOwner(%q)", tbl)
 	if i := strings.IndexByte(tbl, '.'); i >= 0 {
-		log.Println(i)
 		return tbl[:i], tbl[i+1:]
 	}
 	return "", tbl

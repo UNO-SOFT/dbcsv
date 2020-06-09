@@ -145,11 +145,12 @@ func (cfg *Config) OpenVolatile(fileName string) error {
 		return nil
 	}
 	var err error
-	cfg.file, err = os.Open(fileName)
-	if fi, statErr := cfg.file.Stat(); statErr != nil || !fi.Mode().IsRegular() {
-		cfg.permanent = false
+	if cfg.file, err = os.Open(fileName); err != nil {
+		return err
 	}
-	return err
+	fi, err := cfg.file.Stat()
+	cfg.permanent = err == nil && fi.Mode().IsRegular()
+	return nil
 }
 func (cfg *Config) Open(fileName string) error {
 	slurp := fileName == "-" || fileName == ""
@@ -437,6 +438,7 @@ func ReadCSV(ctx context.Context, fn func(Row) error, r io.Reader, delim string,
 	cr.Comma = ([]rune(delim))[0]
 	cr.FieldsPerRecord = -1
 	cr.LazyQuotes = true
+	cr.ReuseRecord = false
 	n := 0
 	for {
 		row, err := cr.Read()
@@ -460,9 +462,13 @@ func ReadCSV(ctx context.Context, fn func(Row) error, r io.Reader, delim string,
 		select {
 		default:
 		case <-ctx.Done():
+			log.Printf("Ctx: %v", ctx.Err())
 			return ctx.Err()
 		}
 		if err := fn(Row{Line: n - 1, Values: row}); err != nil {
+			if err != context.Canceled {
+				log.Printf("Consume %d. row: %+v", n, err)
+			}
 			return err
 		}
 	}
