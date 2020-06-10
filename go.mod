@@ -8,7 +8,6 @@ require (
 	github.com/extrame/xls v0.0.2-0.20180905092746-539786826ced
 	github.com/godror/godror v0.16.1
 	github.com/peterbourgon/ff/v2 v2.0.0
-	golang.org/x/net v0.0.0-20200202094626-16171245cfb2 // indirect
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 	golang.org/x/text v0.3.2
 	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543
@@ -16,4 +15,4 @@ require (
 
 go 1.13
 
-replace github.com/360EntSecGroup-Skylar/excelize/v2 v2.1.0 => github.com/UNO-SOFT/excelize/v2 v2.2.0-alpha.1
+replace github.com/360EntSecGroup-Skylar/excelize/v2 v2.1.0 => github.com/UNO-SOFT/excelize/v2 v2.2.1-alpha2

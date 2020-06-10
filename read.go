@@ -327,7 +327,7 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 			if !(0 <= k && k < len(xfs)) {
 				continue
 			}
-			if _, ok := dateFmts[xfs[k].NumFmtID]; ok {
+			if _, ok := dateFmts[*(xfs[k].NumFmtID)]; ok {
 				f, err := strconv.ParseFloat(raw[j].V, 32)
 				if err != nil {
 					return errors.Errorf("%d:%d.ParseFloat(%q): %w", i, j+1, raw[j].V, err)
