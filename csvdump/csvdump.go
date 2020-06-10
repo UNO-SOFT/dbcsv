@@ -302,7 +302,8 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 	} else {
 		var dRows driver.Rows
 		params = append(append(make([]interface{}, 0, 1+len(params)),
-			sql.Out{Dest: &dRows}), params...)
+			sql.Out{Dest: &dRows}, godror.FetchRowCount(1024)),
+			params...)
 		if _, err = db.ExecContext(ctx, qry, params...); err == nil {
 			rows, err = godror.WrapRows(ctx, db, dRows)
 		}
