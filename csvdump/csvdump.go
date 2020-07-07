@@ -297,12 +297,13 @@ type queryExecer interface {
 func doQuery(ctx context.Context, db queryExecer, qry string, params []interface{}, isCall bool) (*sql.Rows, []Column, error) {
 	var rows *sql.Rows
 	var err error
+	const batchSize = 1024
 	if !isCall {
-		rows, err = db.QueryContext(ctx, qry, godror.FetchRowCount(1024))
+		rows, err = db.QueryContext(ctx, qry, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize))
 	} else {
 		var dRows driver.Rows
-		params = append(append(make([]interface{}, 0, 1+len(params)),
-			sql.Out{Dest: &dRows}, godror.FetchRowCount(1024)),
+		params = append(append(make([]interface{}, 0, 2+len(params)),
+			sql.Out{Dest: &dRows}, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize)),
 			params...)
 		if _, err = db.ExecContext(ctx, qry, params...); err == nil {
 			rows, err = godror.WrapRows(ctx, db, dRows)
