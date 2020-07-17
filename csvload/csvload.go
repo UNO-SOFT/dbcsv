@@ -81,12 +81,13 @@ func Main() error {
 			if err != nil {
 				return fmt.Errorf("%q: %w", *flagConnect, err)
 			}
+			P.StandaloneConnection = false
 			P.SetSessionParamOnInit("NLS_NUMERIC_CHARACTERS", ". ")
 			connector := godror.NewConnector(P)
 			db := sql.OpenDB(connector)
 			defer db.Close()
 
-			db.SetMaxIdleConns(cfg.Concurrency)
+			db.SetMaxIdleConns(0)
 			fields := strings.FieldsFunc(*flagFields, func(r rune) bool { return r == ',' || r == ';' || r == ' ' })
 
 			return cfg.load(ctx, db, args[0], args[1], fields)
@@ -118,7 +119,7 @@ func Main() error {
 	fs = flag.NewFlagSet("csvload", flag.ContinueOnError)
 	fs.StringVar(&cfg.Charset, "charset", encName, "input charset")
 	fs.StringVar(&cfg.Delim, "delim", ";", "CSV separator")
-	fs.IntVar(&cfg.Concurrency, "concurrency", 1, "concurrency")
+	fs.IntVar(&cfg.Concurrency, "concurrency", 4, "concurrency")
 	fs.StringVar(&dateFormat, "date", dateFormat, "date format, in Go notation")
 	fs.IntVar(&cfg.Skip, "skip", 0, "skip rows")
 	fs.IntVar(&cfg.Sheet, "sheet", 0, "sheet of spreadsheet")
@@ -193,6 +194,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	rows := make(chan dbcsv.Row)
 
 	defCtx, defCancel := context.WithCancel(ctx)
+	defer defCancel()
 	grp, grpCtx := errgroup.WithContext(defCtx)
 	grp.Go(func() error {
 		defer close(rows)
@@ -332,10 +334,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		return err
 	}
 
-	log.Println("START")
 	start := time.Now()
-
-	grp, grpCtx = errgroup.WithContext(ctx)
 
 	type rowsType struct {
 		Rows  [][]string
@@ -343,6 +342,8 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	}
 	rowsCh := make(chan rowsType, cfg.Concurrency)
 	chunkPool := sync.Pool{New: func() interface{} { z := make([][]string, 0, chunkSize); return &z }}
+
+	grp, grpCtx = errgroup.WithContext(ctx)
 
 	var inserted int64
 	for i := 0; i < cfg.Concurrency; i++ {
@@ -362,6 +363,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 
 			for rs := range rowsCh {
 				chunk := rs.Rows
+				var err error
 				if err = grpCtx.Err(); err != nil {
 					return err
 				}
@@ -455,6 +457,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	chunk := (*(chunkPool.Get().(*[][]string)))[:0]
 	if err = cfg.ReadRows(grpCtx,
 		func(fn string, row dbcsv.Row) error {
+			var err error
 			if err = grpCtx.Err(); err != nil {
 				log.Printf("Grp: %+v", err)
 				chunk = chunk[:0]
