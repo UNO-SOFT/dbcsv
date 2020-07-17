@@ -118,7 +118,7 @@ func Main() error {
 	fs = flag.NewFlagSet("csvload", flag.ContinueOnError)
 	fs.StringVar(&cfg.Charset, "charset", encName, "input charset")
 	fs.StringVar(&cfg.Delim, "delim", ";", "CSV separator")
-	fs.IntVar(&cfg.Concurrency, "concurrency", 8, "concurrency")
+	fs.IntVar(&cfg.Concurrency, "concurrency", 1, "concurrency")
 	fs.StringVar(&dateFormat, "date", dateFormat, "date format, in Go notation")
 	fs.IntVar(&cfg.Skip, "skip", 0, "skip rows")
 	fs.IntVar(&cfg.Sheet, "sheet", 0, "sheet of spreadsheet")
@@ -332,6 +332,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		return err
 	}
 
+	log.Println("START")
 	start := time.Now()
 
 	grp, grpCtx = errgroup.WithContext(ctx)
