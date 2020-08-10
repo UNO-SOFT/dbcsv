@@ -6,7 +6,7 @@ require (
 	github.com/extrame/goyymmdd v0.0.0-20181026012948-914eb450555b // indirect
 	github.com/extrame/ole2 v0.0.0-20160812065207-d69429661ad7 // indirect
 	github.com/extrame/xls v0.0.2-0.20180905092746-539786826ced
-	github.com/godror/godror v0.19.0
+	github.com/godror/godror v0.19.1
 	github.com/peterbourgon/ff/v2 v2.0.0
 	github.com/xuri/efp v0.0.0-20200605144744-ba689101faaf // indirect
 	golang.org/x/net v0.0.0-20200707034311-ab3426394381 // indirect
@@ -18,4 +18,5 @@ require (
 go 1.13
 
 replace github.com/360EntSecGroup-Skylar/excelize/v2 v2.1.0 => github.com/UNO-SOFT/excelize/v2 v2.2.1-alpha2
+
 replace github.com/360EntSecGroup-Skylar/excelize/v2 v2.2.0 => github.com/UNO-SOFT/excelize/v2 v2.2.1-alpha1
