@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -25,7 +26,6 @@ import (
 
 	"github.com/360EntSecGroup-Skylar/excelize/v2"
 	"github.com/extrame/xls"
-	errors "golang.org/x/xerrors"
 )
 
 var DefaultEncoding = NamedEncoding{Encoding: encoding.Replacement, Name: "utf-8"}
@@ -56,7 +56,7 @@ func EncFromName(e string) (NamedEncoding, error) {
 	if enc, err := htmlindex.Get(e); err == nil {
 		return NamedEncoding{Encoding: enc, Name: e}, nil
 	}
-	return NamedEncoding{Encoding: encoding.Nop, Name: e}, errors.Errorf("%s: %w", e, errors.New("unknown encoding"))
+	return NamedEncoding{Encoding: encoding.Nop, Name: e}, fmt.Errorf("%s: %w", e, errors.New("unknown encoding"))
 }
 
 type FileType string
@@ -119,7 +119,7 @@ func (cfg *Config) Columns() ([]int, error) {
 	for _, x := range strings.Split(cfg.ColumnsString, ",") {
 		i, err := strconv.Atoi(x)
 		if err != nil {
-			return cfg.columns, errors.Errorf("%s: %w", x, err)
+			return cfg.columns, fmt.Errorf("%s: %w", x, err)
 		}
 		cfg.columns = append(cfg.columns, i-1)
 	}
@@ -160,12 +160,12 @@ func (cfg *Config) Open(fileName string) error {
 	} else {
 		var err error
 		if cfg.file, err = os.Open(fileName); err != nil {
-			return errors.Errorf("open %s: %w", fileName, err)
+			return fmt.Errorf("open %s: %w", fileName, err)
 		}
 		fi, err := cfg.file.Stat()
 		if err != nil {
 			cfg.file.Close()
-			return errors.Errorf("stat %s: %w", fileName, err)
+			return fmt.Errorf("stat %s: %w", fileName, err)
 		}
 		slurp = !fi.Mode().IsRegular()
 	}
@@ -180,19 +180,19 @@ func (cfg *Config) Open(fileName string) error {
 		defer os.Remove(fileName)
 		log.Printf("Copying into temporary file %q...", fileName)
 		if _, err = io.Copy(fh, cfg.file); err != nil {
-			return errors.Errorf("copy into %s: %w", fh.Name(), err)
+			return fmt.Errorf("copy into %s: %w", fh.Name(), err)
 		}
 		if err = fh.Close(); err != nil {
-			return errors.Errorf("close %s: %w", fh.Name(), err)
+			return fmt.Errorf("close %s: %w", fh.Name(), err)
 		}
 		if cfg.file, err = os.Open(fileName); err != nil {
-			return errors.Errorf("open %s: %w", fileName, err)
+			return fmt.Errorf("open %s: %w", fileName, err)
 		}
 	}
 	cfg.fileName = fileName
 	_, err = cfg.Type()
 	if err != nil {
-		return errors.Errorf("type %s: %w", cfg.fileName, err)
+		return fmt.Errorf("type %s: %w", cfg.fileName, err)
 	}
 	return nil
 }
@@ -247,7 +247,7 @@ func (cfg *Config) ReadSheets(ctx context.Context) (map[int]string, error) {
 	case Xls:
 		wb, err := xls.Open(cfg.fileName, cfg.Charset)
 		if err != nil {
-			return nil, errors.Errorf("open %q: %w", cfg.fileName, err)
+			return nil, fmt.Errorf("open %q: %w", cfg.fileName, err)
 		}
 		n := wb.NumSheets()
 		m := make(map[int]string, n)
@@ -277,11 +277,11 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 	}
 	xlFile, err := excelize.OpenFile(filename)
 	if err != nil {
-		return errors.Errorf("open %q: %w", filename, err)
+		return fmt.Errorf("open %q: %w", filename, err)
 	}
 	sheetName := xlFile.GetSheetName(sheetIndex)
 	if sheetName == "" {
-		return errors.Errorf("%d (only: %v): %w", sheetIndex, xlFile.GetSheetMap(), UnknownSheet)
+		return fmt.Errorf("%d (only: %v): %w", sheetIndex, xlFile.GetSheetMap(), UnknownSheet)
 	}
 	n := 0
 	var need map[int]bool
@@ -334,11 +334,11 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 			if _, ok := dateFmts[*(xfs[k].NumFmtID)]; ok {
 				f, err := strconv.ParseFloat(raw[j].V, 32)
 				if err != nil {
-					return errors.Errorf("%d:%d.ParseFloat(%q): %w", i, j+1, raw[j].V, err)
+					return fmt.Errorf("%d:%d.ParseFloat(%q): %w", i, j+1, raw[j].V, err)
 				}
 				t, err := xlFile.ExcelDateToTime(f)
 				if err != nil {
-					return errors.Errorf("%d:%d.ExcelDateToTime(%f): %w", i, j+1, f, err)
+					return fmt.Errorf("%d:%d.ExcelDateToTime(%f): %w", i, j+1, f, err)
 				}
 				row[j] = t.Format("2006-01-02")
 			}
@@ -357,11 +357,11 @@ func ReadXLSFile(ctx context.Context, fn func(string, Row) error, filename strin
 	}
 	wb, err := xls.Open(filename, charset)
 	if err != nil {
-		return errors.Errorf("open %q: %w", filename, err)
+		return fmt.Errorf("open %q: %w", filename, err)
 	}
 	sheet := wb.GetSheet(sheetIndex)
 	if sheet == nil {
-		return errors.Errorf("This XLS file does not contain sheet no %d!", sheetIndex)
+		return fmt.Errorf("This XLS file does not contain sheet no %d!", sheetIndex)
 	}
 	var need map[int]bool
 	if len(columns) != 0 {

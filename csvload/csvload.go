@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -28,7 +29,6 @@ import (
 
 	"github.com/peterbourgon/ff/v2/ffcli"
 	"golang.org/x/sync/errgroup"
-	errors "golang.org/x/xerrors"
 
 	"github.com/godror/godror"
 )
@@ -355,7 +355,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 			defer tx.Rollback()
 			stmt, prepErr := tx.Prepare(qry)
 			if prepErr != nil {
-				return errors.Errorf("%s: %w", qry, prepErr)
+				return fmt.Errorf("%s: %w", qry, prepErr)
 			}
 			nCols := len(columns)
 			cols := make([][]string, nCols)
@@ -404,7 +404,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 						}
 
 						if err != nil {
-							return errors.Errorf("%s: %w", columns[i].Name, err)
+							return fmt.Errorf("%s: %w", columns[i].Name, err)
 						}
 						return nil
 					}
@@ -419,7 +419,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 					atomic.AddInt64(&inserted, int64(len(chunk)))
 					continue
 				}
-				err = errors.Errorf("%s: %w", qry, err)
+				err = fmt.Errorf("%s: %w", qry, err)
 				log.Println(err)
 
 				rowsR := make([]reflect.Value, len(rowsI))
@@ -439,7 +439,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 						R2.Index(i).Set(r.Index(j))
 					}
 					if _, err = stmt.Exec(rowsI2...); err != nil {
-						err = errors.Errorf("%s, %q: %w", qry, rowsI2, err)
+						err = fmt.Errorf("%s, %q: %w", qry, rowsI2, err)
 						log.Println(err)
 						return err
 					}
@@ -571,13 +571,13 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
 	var n int64
 	var cols []Column
 	if err := db.QueryRowContext(ctx, qry, tbl, owner).Scan(&n); err != nil {
-		return cols, errors.Errorf("%s: %w", qry, err)
+		return cols, fmt.Errorf("%s: %w", qry, err)
 	}
 	if n > 0 && truncate {
 		qry = `TRUNCATE TABLE ` + ownerDot + tbl
 		if _, err := db.ExecContext(ctx, qry); err != nil {
 			if _, delErr := db.ExecContext(ctx, "DELETE FROM "+ownerDot+tbl); delErr != nil {
-				return cols, errors.Errorf("%s: %w", qry, err)
+				return cols, fmt.Errorf("%s: %w", qry, err)
 			}
 		}
 	}
@@ -589,7 +589,7 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
 		}
 		qry := fmt.Sprintf("CREATE TABLE %s%s %s AS SELECT * FROM %s WHERE 1=0", ownerDot, tbl, tblsp, copyTable)
 		if _, err := db.ExecContext(ctx, qry); err != nil {
-			return cols, errors.Errorf("%s: %w", qry, err)
+			return cols, fmt.Errorf("%s: %w", qry, err)
 		}
 	} else if n == 0 && copyTable == "" {
 		row := <-rows
@@ -669,7 +669,7 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
 		qry = buf.String()
 		log.Println(qry)
 		if _, err := db.Exec(qry); err != nil {
-			return cols, errors.Errorf("%s: %w", qry, err)
+			return cols, fmt.Errorf("%s: %w", qry, err)
 		}
 		cols = cols[:0]
 	}
@@ -679,7 +679,7 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
   ORDER BY column_id`
 	tRows, err := db.QueryContext(ctx, qry, tbl, owner)
 	if err != nil {
-		return cols, errors.Errorf("%s: %w", qry, err)
+		return cols, fmt.Errorf("%s: %w", qry, err)
 	}
 	defer tRows.Close()
 	for tRows.Next() {
@@ -738,7 +738,7 @@ func (c Column) FromString(ss []string) (interface{}, error) {
 			}
 			t, err := time.ParseInLocation(dateFormat[:len(s)], s, time.Local)
 			if err != nil {
-				return res, errors.Errorf("%d. %q: %w", i, s, err)
+				return res, fmt.Errorf("%d. %q: %w", i, s, err)
 			}
 			res[i] = sql.NullTime{Valid: true, Time: t}
 		}
@@ -749,7 +749,7 @@ func (c Column) FromString(ss []string) (interface{}, error) {
 		for i, s := range ss {
 			if len(s) > c.Length {
 				ss[i] = s[:c.Length]
-				return ss, errors.Errorf("%d. %q is longer (%d) then allowed (%d) for column %v", i, s, len(s), c.Length, c)
+				return ss, fmt.Errorf("%d. %q is longer (%d) then allowed (%d) for column %v", i, s, len(s), c.Length, c)
 			}
 		}
 		return ss, nil
@@ -764,7 +764,7 @@ func (c Column) FromString(ss []string) (interface{}, error) {
 			}, s)
 			if e != "" {
 				ss[i] = ""
-				return ss, errors.Errorf("%d. %q is not integer (%q)", i, s, e)
+				return ss, fmt.Errorf("%d. %q is not integer (%q)", i, s, e)
 			}
 		}
 		return ss, nil
@@ -779,7 +779,7 @@ func (c Column) FromString(ss []string) (interface{}, error) {
 			}, s)
 			if e != "" {
 				ss[i] = ""
-				return ss, errors.Errorf("%d. %q is not float (%q)", i, s, e)
+				return ss, fmt.Errorf("%d. %q is not float (%q)", i, s, e)
 			}
 		}
 		return ss, nil
@@ -793,7 +793,7 @@ func getColumns(ctx context.Context, db *sql.DB, tbl string) ([]Column, error) {
 	const qry = "SELECT column_name, data_type, data_length, data_precision, data_scale, nullable FROM all_tab_cols WHERE table_name = UPPER(:1) AND owner = NVL(:2, SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')) ORDER BY column_id"
 	rows, err := db.QueryContext(ctx, qry, tbl, owner)
 	if err != nil {
-		return nil, errors.Errorf("%s: %w", qry, err)
+		return nil, fmt.Errorf("%s: %w", qry, err)
 	}
 	defer rows.Close()
 	var cols []Column

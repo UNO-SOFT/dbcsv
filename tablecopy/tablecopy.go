@@ -19,7 +19,6 @@ import (
 	godror "github.com/godror/godror"
 
 	"golang.org/x/sync/errgroup"
-	errors "golang.org/x/xerrors"
 )
 
 func main() {
@@ -137,7 +136,7 @@ will execute a "SELECT * FROM Source_table@source_db WHERE F_ield=1" and an "INS
 			for _, qry := range qs {
 				stmt, err := conn.Prepare(qry)
 				if err != nil {
-					return errors.Errorf("%s: %w", qry, err)
+					return fmt.Errorf("%s: %w", qry, err)
 				}
 				_, err = stmt.Exec(nil) //nolint: SA1019 not easy
 				stmt.Close()
@@ -178,7 +177,7 @@ will execute a "SELECT * FROM Source_table@source_db WHERE F_ield=1" and an "INS
 	if err != nil {
 		log.Printf("[WARN] Read-Only transaction: %v", err)
 		if srcTx, err = srcDB.BeginTx(subCtx, nil); err != nil {
-			return errors.Errorf("%s: %w", "beginTx", err)
+			return fmt.Errorf("%s: %w", "beginTx", err)
 		}
 	}
 	defer srcTx.Rollback()
@@ -292,7 +291,7 @@ func One(ctx context.Context, dstTx, srcTx *sql.Tx, task copyTask, Log func(...i
 
 	stmt, err := dstTx.PrepareContext(ctx, dstQry.String())
 	if err != nil {
-		return n, errors.Errorf("%s: %w", dstQry.String(), err)
+		return n, fmt.Errorf("%s: %w", dstQry.String(), err)
 	}
 	defer stmt.Close()
 	if Log != nil {
@@ -302,7 +301,7 @@ func One(ctx context.Context, dstTx, srcTx *sql.Tx, task copyTask, Log func(...i
 
 	rows, err := srcTx.QueryContext(ctx, srcQry.String())
 	if err != nil {
-		return n, errors.Errorf("%s: %w", srcQry.String(), err)
+		return n, fmt.Errorf("%s: %w", srcQry.String(), err)
 	}
 	defer rows.Close()
 
@@ -316,7 +315,7 @@ func One(ctx context.Context, dstTx, srcTx *sql.Tx, task copyTask, Log func(...i
 			return n, err
 		}
 		if _, err = stmt.ExecContext(ctx, values...); err != nil {
-			return n, errors.Errorf("%s %v: %w", dstQry.String(), values, err)
+			return n, fmt.Errorf("%s %v: %w", dstQry.String(), values, err)
 		}
 		n++
 	}
@@ -327,7 +326,7 @@ func getColumns(ctx context.Context, tx *sql.Tx, tbl string) ([]string, error) {
 	qry := "SELECT * FROM " + tbl + " WHERE 1=0"
 	rows, err := tx.QueryContext(ctx, qry)
 	if err != nil {
-		return nil, errors.Errorf("%s: %w", qry, err)
+		return nil, fmt.Errorf("%s: %w", qry, err)
 	}
 	cols, err := rows.Columns()
 	rows.Close()

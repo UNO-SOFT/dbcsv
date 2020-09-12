@@ -11,6 +11,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -25,8 +26,6 @@ import (
 
 	"github.com/UNO-SOFT/dbcsv"
 	"github.com/godror/godror"
-
-	errors "golang.org/x/xerrors"
 )
 
 const DefaultFetchRowCount = 8
@@ -97,21 +96,21 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 	}
 	for i, q := range queries {
 		if queries[i], err = envEnc.NewDecoder().String(q); err != nil {
-			return errors.Errorf("%q: %w", q, err)
+			return fmt.Errorf("%q: %w", q, err)
 		}
 	}
 
 	params := make([]interface{}, 0, len(flagValues.Strings))
 	for _, s := range flagValues.Strings {
 		if i := strings.IndexAny(s, "-:= \t"); i < 0 {
-			return errors.Errorf("%q does not contain a separator", s)
+			return fmt.Errorf("%q does not contain a separator", s)
 		} else {
 			params = append(params, sql.Named(strings.ToLower(s[:i]), s[i+1:]))
 		}
 	}
 	db, err := sql.Open("godror", *flagConnect)
 	if err != nil {
-		return errors.Errorf("%s: %w", *flagConnect, err)
+		return fmt.Errorf("%s: %w", *flagConnect, err)
 	}
 	defer db.Close()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -121,7 +120,7 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 	if !(*flagOut == "" || *flagOut == "-") {
 		os.MkdirAll(filepath.Dir(*flagOut), 0775)
 		if fh, err = os.Create(*flagOut); err != nil {
-			return errors.Errorf("%s: %w", *flagOut, err)
+			return fmt.Errorf("%s: %w", *flagOut, err)
 		}
 	}
 	defer fh.Close()
@@ -209,7 +208,7 @@ func doQuery(ctx context.Context, db queryExecer, qry string, fetchRowCount int,
 	params = append(params, godror.FetchRowCount(fetchRowCount))
 	rows, err := db.QueryContext(ctx, qry, params...)
 	if err != nil {
-		return nil, errors.Errorf("%q: %w", qry, err)
+		return nil, fmt.Errorf("%q: %w", qry, err)
 	}
 	defer rows.Close()
 	columns, err := rows.Columns()
@@ -224,7 +223,7 @@ func doQuery(ctx context.Context, db queryExecer, qry string, fetchRowCount int,
 	values := make([]map[string]interface{}, 0, fetchRowCount)
 	for rows.Next() {
 		if err := rows.Scan(dest...); err != nil {
-			return values, errors.Errorf("scan into %#v: %w", dest, err)
+			return values, fmt.Errorf("scan into %#v: %w", dest, err)
 		}
 		m := make(map[string]interface{}, len(vals))
 		for i := range vals {

@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -24,7 +25,6 @@ import (
 	"golang.org/x/text/transform"
 
 	_ "github.com/godror/godror"
-	errors "golang.org/x/xerrors"
 )
 
 var (
@@ -46,7 +46,7 @@ func Main() error {
 			lang = lang[i+1:]
 			enc, err := htmlindex.Get(lang)
 			if err != nil {
-				return errors.Errorf("Get encoding for %q: %w", lang, err)
+				return fmt.Errorf("Get encoding for %q: %w", lang, err)
 			}
 			stdout = transform.NewWriter(stdout, enc.NewEncoder())
 			stderr = transform.NewWriter(stderr, enc.NewEncoder())
@@ -186,7 +186,7 @@ Usage:
 	dsn := os.ExpandEnv(*flagConnect)
 	db, err := sql.Open("godror", dsn)
 	if err != nil {
-		return errors.Errorf("%s: %w", dsn, err)
+		return fmt.Errorf("%s: %w", dsn, err)
 	}
 	defer db.Close()
 
@@ -195,12 +195,12 @@ Usage:
 	n, err = dbExec(db, *flagFunc, fixParams, int64(*flagFuncRetOk), rows, *flagOneTx)
 	bw.Flush()
 	if err != nil {
-		return errors.Errorf("exec %q: %v", *flagFunc, err)
+		return fmt.Errorf("exec %q: %v", *flagFunc, err)
 	}
 	d := time.Since(start)
 	close(errch)
 	if len(errs) > 0 {
-		return errors.Errorf("ERRORS:\n\t" + strings.Join(errs, "\n\t"))
+		return fmt.Errorf("ERRORS:\n\t" + strings.Join(errs, "\n\t"))
 	}
 	log.Printf("Processed %d rows in %s.", n, d)
 	return nil

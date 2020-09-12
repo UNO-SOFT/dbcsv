@@ -33,8 +33,6 @@ import (
 	"github.com/UNO-SOFT/spreadsheet/ods"
 	"github.com/UNO-SOFT/spreadsheet/xlsx"
 	"github.com/godror/godror"
-
-	errors "golang.org/x/xerrors"
 )
 
 func main() {
@@ -149,7 +147,7 @@ and dump all the columns of the cursor returned by the function.
 	}
 	db, err := sql.Open("godror", *flagConnect)
 	if err != nil {
-		return errors.Errorf("%s: %w", *flagConnect, err)
+		return fmt.Errorf("%s: %w", *flagConnect, err)
 	}
 	defer db.Close()
 	ctx, cancel := dbcsv.Wrap(context.Background())
@@ -159,7 +157,7 @@ and dump all the columns of the cursor returned by the function.
 	if !(*flagOut == "" || *flagOut == "-") {
 		os.MkdirAll(filepath.Dir(*flagOut), 0775)
 		if fh, err = os.Create(*flagOut); err != nil {
-			return errors.Errorf("%s: %w", *flagOut, err)
+			return fmt.Errorf("%s: %w", *flagOut, err)
 		}
 	}
 	defer fh.Close()
@@ -171,7 +169,7 @@ and dump all the columns of the cursor returned by the function.
 	if err != nil {
 		log.Printf("[WARN] Read-Only transaction: %v", err)
 		if tx, err = db.BeginTx(ctx, nil); err != nil {
-			return errors.Errorf("%s: %w", "beginTx", err)
+			return fmt.Errorf("%s: %w", "beginTx", err)
 		}
 	}
 	defer tx.Rollback()
@@ -205,7 +203,7 @@ and dump all the columns of the cursor returned by the function.
 		for sheetNo := range queries {
 			qry := queries[sheetNo]
 			if qry, err = dec.String(qry); err != nil {
-				return errors.Errorf("%q: %w", queries[sheetNo], err)
+				return fmt.Errorf("%q: %w", queries[sheetNo], err)
 			}
 			var name string
 			i := strings.IndexByte(qry, ':')
@@ -310,7 +308,7 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 		}
 	}
 	if err != nil {
-		return nil, nil, errors.Errorf("%q: %w", qry, err)
+		return nil, nil, fmt.Errorf("%q: %w", qry, err)
 	}
 	columns, err := getColumns(rows)
 	if err != nil {
@@ -345,7 +343,7 @@ func dumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column,
 	n := 0
 	for rows.Next() {
 		if err := rows.Scan(dest...); err != nil {
-			return errors.Errorf("scan into %#v: %w", dest, err)
+			return fmt.Errorf("scan into %#v: %w", dest, err)
 		}
 		if raw {
 			for i, data := range dest {
@@ -394,7 +392,7 @@ func dumpSheet(ctx context.Context, sheet spreadsheet.Sheet, rows *sql.Rows, col
 	n := 0
 	for rows.Next() {
 		if err := rows.Scan(dest...); err != nil {
-			return errors.Errorf("scan into %#v: %w", dest, err)
+			return fmt.Errorf("scan into %#v: %w", dest, err)
 		}
 		if err := sheet.AppendRow(vals...); err != nil {
 			return err
