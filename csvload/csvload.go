@@ -747,7 +747,7 @@ func (c Column) FromString(ss []string) (interface{}, error) {
 
 	if strings.HasPrefix(c.DataType, "VARCHAR2") {
 		for i, s := range ss {
-			if len(s) > c.Length {
+			if len(s) > c.Length * 4 { // AL32UTF8 or not?
 				ss[i] = s[:c.Length]
 				return ss, fmt.Errorf("%d. %q is longer (%d) then allowed (%d) for column %v", i, s, len(s), c.Length, c)
 			}
