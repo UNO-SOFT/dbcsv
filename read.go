@@ -132,7 +132,7 @@ func (cfg *Config) Rewind() error {
 	if err != nil {
 		return err
 	}
-	if cfg.rdr != nil {
+	if cfg.rdr != nil && cfg.rdr != cfg.file {
 		cfg.rdr.Close()
 		cfg.rdr = nil
 		if zr, err := zstd.NewReader(cfg.file); err == nil {
@@ -232,7 +232,6 @@ func (cfg *Config) Open(fileName string) error {
 				return fmt.Errorf("open %s: %w", fileName, err)
 			}
 		}
-		cfg.permanent = true
 	}
 	cfg.fileName = fileName
 	if cfg.rdr == nil {
@@ -246,16 +245,16 @@ func (cfg *Config) Open(fileName string) error {
 }
 
 func (cfg *Config) Close() error {
-	fh := cfg.file
-	cfg.file, cfg.fileName, cfg.typ = nil, "", Unknown
-	if cfg.rdr != nil {
-		cfg.rdr.Close()
-		cfg.rdr = nil
+	rdr, fh := cfg.rdr, cfg.file
+	cfg.rdr, cfg.file, cfg.fileName, cfg.typ = nil, nil, "", Unknown
+	var err error
+	if rdr != nil {
+		err = rdr.Close()
 	}
-	if fh != nil {
-		return fh.Close()
+	if fh != nil && rdr != fh {
+		err = fh.Close()
 	}
-	return nil
+	return err
 }
 
 func (cfg *Config) ReadRows(ctx context.Context, fn func(string, Row) error) (err error) {
