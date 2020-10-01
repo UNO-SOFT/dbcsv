@@ -69,6 +69,7 @@ func Main() error {
 	fs.BoolVar(&cfg.ForceString, "force-string", false, "force all columns to be VARCHAR2")
 	fs.BoolVar(&cfg.JustPrint, "just-print", false, "just print the INSERTs")
 	fs.StringVar(&cfg.Copy, "copy", "", "copy this table's structure")
+	fs.BoolVar(&cfg.CompressTemp, "compress-temp", false, "compress temporary file")
 	if *flagConnect == "" {
 		*flagConnect = os.Getenv("BRUNO_ID")
 	}
@@ -747,7 +748,7 @@ func (c Column) FromString(ss []string) (interface{}, error) {
 
 	if strings.HasPrefix(c.DataType, "VARCHAR2") {
 		for i, s := range ss {
-			if len(s) > c.Length * 4 { // AL32UTF8 or not?
+			if len(s) > c.Length*4 { // AL32UTF8 or not?
 				ss[i] = s[:c.Length]
 				return ss, fmt.Errorf("%d. %q is longer (%d) then allowed (%d) for column %v", i, s, len(s), c.Length, c)
 			}

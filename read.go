@@ -25,8 +25,8 @@ import (
 	"golang.org/x/text/transform"
 
 	"github.com/360EntSecGroup-Skylar/excelize/v2"
-	"github.com/klauspost/compress/zstd"
 	"github.com/extrame/xls"
+	"github.com/klauspost/compress/zstd"
 )
 
 var DefaultEncoding = NamedEncoding{Encoding: encoding.Replacement, Name: "utf-8"}
@@ -95,7 +95,9 @@ type Config struct {
 	fileName      string
 	file          *os.File
 	rdr           io.ReadCloser
+	zr            *zstd.Decoder
 	permanent     bool
+	CompressTemp bool
 }
 
 func (cfg *Config) Encoding() (encoding.Encoding, error) {
@@ -132,12 +134,9 @@ func (cfg *Config) Rewind() error {
 	if err != nil {
 		return err
 	}
-	if cfg.rdr != nil && cfg.rdr != cfg.file {
-		cfg.rdr.Close()
-		cfg.rdr = nil
-		if zr, err := zstd.NewReader(cfg.file); err == nil {
-			cfg.rdr = zr.IOReadCloser()
-		}
+	if cfg.zr != nil {
+		err = cfg.zr.Reset(cfg.file)
+		cfg.rdr = cfg.zr.IOReadCloser()
 	}
 	return err
 }
@@ -200,37 +199,38 @@ func (cfg *Config) Open(fileName string) error {
 			return err
 		}
 		r = io.MultiReader(bytes.NewReader(buf.Bytes()), r)
-		if cfg.typ == Csv {
-			zw, err := zstd.NewWriter(fh)
-			if err != nil {
+		compress := cfg.CompressTemp && cfg.typ == Csv
+		w := io.WriteCloser(fh)
+		if compress {
+			if w, err = zstd.NewWriter(fh); err != nil {
 				return err
 			}
-			if _, err = io.Copy(zw, r); err != nil {
+		}
+
+		log.Printf("Copying into temporary file %q...", fh.Name())
+		if _, err = io.Copy(w, r); err != nil {
+			return err
+		}
+		if compress {
+			if err = w.Close(); err != nil {
 				return err
 			}
-			log.Printf("Copying into compressed temporary file %q...", fileName)
-			if err = zw.Close(); err != nil {
+		}
+		if err = fh.Sync(); err != nil {
+			return err
+		}
+		if err = fh.Close(); err != nil {
+			return err
+		}
+		if cfg.file, err = os.Open(fh.Name()); err != nil {
+			return err
+		}
+		os.Remove(fh.Name())
+		if compress {
+			if cfg.zr, err = zstd.NewReader(cfg.file); err != nil {
 				return err
 			}
-			if cfg.file, err = os.Open(fh.Name()); err != nil {
-				return err
-			}
-			zr, err := zstd.NewReader(cfg.file)
-			if err != nil {
-				return err
-			}
-			cfg.rdr = zr.IOReadCloser()
-		} else {
-			log.Printf("Copying into temporary file %q...", fileName)
-			if _, err = io.Copy(fh, r); err != nil {
-				return fmt.Errorf("copy into %s: %w", fh.Name(), err)
-			}
-			if err = fh.Close(); err != nil {
-				return fmt.Errorf("close %s: %w", fh.Name(), err)
-			}
-			if cfg.file, err = os.Open(fileName); err != nil {
-				return fmt.Errorf("open %s: %w", fileName, err)
-			}
+			cfg.rdr = cfg.zr.IOReadCloser()
 		}
 	}
 	cfg.fileName = fileName
@@ -245,9 +245,12 @@ func (cfg *Config) Open(fileName string) error {
 }
 
 func (cfg *Config) Close() error {
-	rdr, fh := cfg.rdr, cfg.file
-	cfg.rdr, cfg.file, cfg.fileName, cfg.typ = nil, nil, "", Unknown
+	zr, rdr, fh := cfg.zr, cfg.rdr, cfg.file
+	cfg.zr, cfg.rdr, cfg.file, cfg.fileName, cfg.typ = nil, nil, nil, "", Unknown
 	var err error
+	if zr != nil {
+		zr.Close()
+	}
 	if rdr != nil {
 		err = rdr.Close()
 	}

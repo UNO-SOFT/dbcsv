@@ -1,7 +1,7 @@
 module github.com/UNO-SOFT/dbcsv
 
 require (
-	github.com/360EntSecGroup-Skylar/excelize/v2 v2.3.0
+	github.com/360EntSecGroup-Skylar/excelize/v2 v2.3.1
 	github.com/UNO-SOFT/spreadsheet v0.0.5
 	github.com/dvyukov/go-fuzz v0.0.0-20200318091601-be3528f3a813 // indirect
 	github.com/extrame/goyymmdd v0.0.0-20181026012948-914eb450555b // indirect
@@ -13,8 +13,9 @@ require (
 	github.com/valyala/quicktemplate v1.6.2 // indirect
 	github.com/xuri/efp v0.0.0-20200605144744-ba689101faaf // indirect
 	golang.org/dl v0.0.0-20200724191219-e4fbcf8a7a81 // indirect
-	golang.org/x/net v0.0.0-20200904194848-62affa334b73 // indirect
-	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
+	golang.org/x/crypto v0.0.0-20200930160638-afb6bcd081ae // indirect
+	golang.org/x/net v0.0.0-20200930145003-4acb6c075d10 // indirect
+	golang.org/x/sync v0.0.0-20200930132711-30421366ff76
 	golang.org/x/text v0.3.3
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
 )
@@ -26,3 +27,4 @@ replace github.com/360EntSecGroup-Skylar/excelize/v2 v2.1.0 => github.com/UNO-SO
 replace github.com/360EntSecGroup-Skylar/excelize/v2 v2.2.0 => github.com/UNO-SOFT/excelize/v2 v2.2.1-alpha1
 
 replace github.com/360EntSecGroup-Skylar/excelize/v2 v2.3.0 => github.com/UNO-SOFT/excelize/v2 v2.2.1-alpha1
+replace github.com/360EntSecGroup-Skylar/excelize/v2 v2.3.1 => github.com/UNO-SOFT/excelize/v2 v2.2.1-alpha1
