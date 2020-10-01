@@ -27,7 +27,7 @@ import (
 
 	"github.com/UNO-SOFT/dbcsv"
 
-	"github.com/peterbourgon/ff/v2/ffcli"
+	"github.com/peterbourgon/ff/v3/ffcli"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/godror/godror"
@@ -467,7 +467,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 			if !headerSeen {
 				headerSeen = true
 				return nil
-			} else if n%10000 == 0 && cfg.WriteHeapProf != nil {
+			} else if cfg.WriteHeapProf != nil && n%10000 == 0 {
 				cfg.WriteHeapProf()
 			}
 			allEmpty := true
@@ -676,7 +676,7 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
 
 	qry = `SELECT column_name, data_type, NVL(data_length, 0), NVL(data_precision, 0), NVL(data_scale, 0), nullable
   FROM all_tab_cols WHERE table_name = :1 AND owner = NVL(:2, SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA'))
-  ORDER BY column_id`
+  ORDER BY nullable, column_id`
 	tRows, err := db.QueryContext(ctx, qry, tbl, owner)
 	if err != nil {
 		return cols, fmt.Errorf("%s: %w", qry, err)
@@ -790,7 +790,10 @@ func (c Column) FromString(ss []string) (interface{}, error) {
 func getColumns(ctx context.Context, db *sql.DB, tbl string) ([]Column, error) {
 	owner, tbl := tableSplitOwner(strings.ToUpper(tbl))
 	// TODO(tgulacsi): this is Oracle-specific!
-	const qry = "SELECT column_name, data_type, data_length, data_precision, data_scale, nullable FROM all_tab_cols WHERE table_name = UPPER(:1) AND owner = NVL(:2, SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')) ORDER BY column_id"
+	const qry = `SELECT column_name, data_type, data_length, data_precision, data_scale, nullable 
+		FROM all_tab_cols 
+		WHERE table_name = UPPER(:1) AND owner = NVL(:2, SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')) 
+		ORDER BY nullable, column_id`
 	rows, err := db.QueryContext(ctx, qry, tbl, owner)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", qry, err)
