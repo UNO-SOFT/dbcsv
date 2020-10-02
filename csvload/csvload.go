@@ -42,7 +42,7 @@ func main() {
 var dateFormat = "2006-01-02 15:04:05"
 var xlsEpoch = time.Date(1899, 12, 30, 0, 0, 0, 0, time.Local)
 
-const chunkSize = 1024
+const defaultChunkSize = 1024
 
 type config struct {
 	dbcsv.Config
@@ -335,15 +335,14 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	}
 
 	var hasLOB bool
+	chunkSize := defaultChunkSize
 	for _, c := range columns {
-		if hasLob = c.DataType == "CLOB" || c.DataType == "BLOB" ;hasLob {
+		if hasLOB = c.DataType == "CLOB" || c.DataType == "BLOB"; hasLOB {
+			chunkSize = 1
 			break
 		}
 	}
-	if hasLOB {
-		chunkSize = 1
-	}
-	
+
 	start := time.Now()
 
 	type rowsType struct {
@@ -428,6 +427,11 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 				if err == nil {
 					atomic.AddInt64(&inserted, int64(len(chunk)))
 					continue
+				}
+				if chunkSize == 1 {
+					err = fmt.Errorf("%s [%v]: %w", qry, rowsI, err)
+					log.Println(err)
+					return err
 				}
 				err = fmt.Errorf("%s: %w", qry, err)
 				log.Println(err)
