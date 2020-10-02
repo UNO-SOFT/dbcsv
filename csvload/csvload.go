@@ -353,7 +353,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 				return txErr
 			}
 			defer tx.Rollback()
-			stmt, prepErr := tx.Prepare(qry)
+			stmt, prepErr := tx.PrepareContext(grpCtx, qry)
 			if prepErr != nil {
 				return fmt.Errorf("%s: %w", qry, prepErr)
 			}
@@ -783,6 +783,16 @@ func (c Column) FromString(ss []string) (interface{}, error) {
 		}
 		return ss, nil
 	}
+
+	if c.DataType == "CLOB" || c.DataType == "BLOB" {
+		isClob := c.DataType == "CLOB"
+		res := make([]godror.Lob, len(ss))
+		for i, s := range ss {
+			res[i] = godror.Lob{IsClob: isClob, Reader: strings.NewReader(s)}
+		}
+		return res, nil
+	}
+
 	return ss, nil
 }
 
