@@ -8,7 +8,7 @@ require (
 	github.com/extrame/ole2 v0.0.0-20160812065207-d69429661ad7 // indirect
 	github.com/extrame/xls v0.0.2-0.20180905092746-539786826ced
 	github.com/godror/godror v0.20.2
-	github.com/klauspost/compress v1.11.0
+	github.com/klauspost/compress v1.11.1
 	github.com/peterbourgon/ff/v3 v3.0.0
 	github.com/valyala/quicktemplate v1.6.2 // indirect
 	github.com/xuri/efp v0.0.0-20200605144744-ba689101faaf // indirect
@@ -27,4 +27,5 @@ replace github.com/360EntSecGroup-Skylar/excelize/v2 v2.1.0 => github.com/UNO-SO
 replace github.com/360EntSecGroup-Skylar/excelize/v2 v2.2.0 => github.com/UNO-SOFT/excelize/v2 v2.2.1-alpha1
 
 replace github.com/360EntSecGroup-Skylar/excelize/v2 v2.3.0 => github.com/UNO-SOFT/excelize/v2 v2.2.1-alpha1
+
 replace github.com/360EntSecGroup-Skylar/excelize/v2 v2.3.1 => github.com/UNO-SOFT/excelize/v2 v2.2.1-alpha1

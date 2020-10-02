@@ -6,6 +6,7 @@ package dbcsv_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -48,6 +49,45 @@ func TestRead(t *testing.T) {
 			if err != nil {
 				t.Errorf("ReadRows(%q): %v", fn, err)
 			}
+		}
+	}
+}
+
+func TestCompressedTempCSV(t *testing.T) {
+	cfg := dbcsv.Config{CompressTemp: true}
+	stdr, stdw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStdin := os.Stdin
+	os.Stdin = stdr
+	defer func() { os.Stdin = oldStdin }()
+	go func() {
+		stdw.Write([]byte("id;str\n"))
+		for i := 0; i < 1000; i++ {
+			if _, err := fmt.Fprintf(stdw, "%d;árvíztűrő tükörfúrógép\n", i); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}()
+
+	if err = cfg.Open(""); err != nil {
+		t.Fatal(err)
+	}
+	typ, err := cfg.Type()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log("type:", typ)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	for i := 0; i < 10; i++ {
+		if err := cfg.Rewind(); err != nil {
+			t.Fatal(err)
+		}
+		if err := cfg.ReadRows(ctx, func(s string, r dbcsv.Row) error { t.Log(s, r); return nil }); err != nil {
+			t.Error(err)
 		}
 	}
 }
