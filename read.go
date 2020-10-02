@@ -97,7 +97,6 @@ type Config struct {
 	rdr           io.ReadCloser
 	zr            *zstd.Decoder
 	permanent     bool
-	CompressTemp bool
 }
 
 func (cfg *Config) Encoding() (encoding.Encoding, error) {
@@ -130,12 +129,17 @@ func (cfg *Config) Columns() ([]int, error) {
 	return cfg.columns, nil
 }
 func (cfg *Config) Rewind() error {
+	if cfg.zr != nil {
+		cfg.zr.Close()
+	}
 	_, err := cfg.file.Seek(0, 0)
 	if err != nil {
 		return err
 	}
 	if cfg.zr != nil {
-		err = cfg.zr.Reset(cfg.file)
+		if cfg.zr, err = zstd.NewReader(cfg.file); err != nil {
+			return err
+		}
 		cfg.rdr = cfg.zr.IOReadCloser()
 	}
 	return err
@@ -199,7 +203,7 @@ func (cfg *Config) Open(fileName string) error {
 			return err
 		}
 		r = io.MultiReader(bytes.NewReader(buf.Bytes()), r)
-		compress := cfg.CompressTemp && cfg.typ == Csv
+		compress := cfg.typ == Csv
 		w := io.WriteCloser(fh)
 		if compress {
 			if w, err = zstd.NewWriter(fh); err != nil {

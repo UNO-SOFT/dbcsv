@@ -54,7 +54,6 @@ func TestRead(t *testing.T) {
 }
 
 func TestCompressedTempCSV(t *testing.T) {
-	cfg := dbcsv.Config{CompressTemp: true}
 	stdr, stdw, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -63,6 +62,7 @@ func TestCompressedTempCSV(t *testing.T) {
 	os.Stdin = stdr
 	defer func() { os.Stdin = oldStdin }()
 	go func() {
+		defer stdw.Close()
 		stdw.Write([]byte("id;str\n"))
 		for i := 0; i < 1000; i++ {
 			if _, err := fmt.Fprintf(stdw, "%d;árvíztűrő tükörfúrógép\n", i); err != nil {
@@ -71,6 +71,7 @@ func TestCompressedTempCSV(t *testing.T) {
 		}
 	}()
 
+	var cfg dbcsv.Config
 	if err = cfg.Open(""); err != nil {
 		t.Fatal(err)
 	}
@@ -83,9 +84,6 @@ func TestCompressedTempCSV(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	for i := 0; i < 10; i++ {
-		if err := cfg.Rewind(); err != nil {
-			t.Fatal(err)
-		}
 		if err := cfg.ReadRows(ctx, func(s string, r dbcsv.Row) error { t.Log(s, r); return nil }); err != nil {
 			t.Error(err)
 		}
