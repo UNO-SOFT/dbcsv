@@ -61,12 +61,15 @@ func TestCompressedTempCSV(t *testing.T) {
 	oldStdin := os.Stdin
 	os.Stdin = stdr
 	defer func() { os.Stdin = oldStdin }()
+	errCh := make(chan error, 1)
 	go func() {
 		defer stdw.Close()
+		defer close(errCh)
 		stdw.Write([]byte("id;str\n"))
 		for i := 0; i < 1000; i++ {
 			if _, err := fmt.Fprintf(stdw, "%d;árvíztűrő tükörfúrógép\n", i); err != nil {
-				t.Fatal(err)
+				errCh <- err
+				return
 			}
 		}
 	}()
@@ -87,5 +90,8 @@ func TestCompressedTempCSV(t *testing.T) {
 		if err := cfg.ReadRows(ctx, func(s string, r dbcsv.Row) error { t.Log(s, r); return nil }); err != nil {
 			t.Error(err)
 		}
+	}
+	if err := <-errCh; err != nil {
+		t.Fatal(err)
 	}
 }

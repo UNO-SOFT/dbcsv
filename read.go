@@ -30,7 +30,8 @@ import (
 )
 
 var DefaultEncoding = NamedEncoding{Encoding: encoding.Replacement, Name: "utf-8"}
-var UnknownSheet = errors.New("unknown sheet")
+
+var ErrUnknownSheet = errors.New("unknown sheet")
 
 type NamedEncoding struct {
 	encoding.Encoding
@@ -339,7 +340,7 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 	}
 	sheetName := xlFile.GetSheetName(sheetIndex)
 	if sheetName == "" {
-		return fmt.Errorf("%d (only: %v): %w", sheetIndex, xlFile.GetSheetMap(), UnknownSheet)
+		return fmt.Errorf("%d (only: %v): %w", sheetIndex, xlFile.GetSheetMap(), ErrUnknownSheet)
 	}
 	n := 0
 	var need map[int]bool
@@ -419,7 +420,7 @@ func ReadXLSFile(ctx context.Context, fn func(string, Row) error, filename strin
 	}
 	sheet := wb.GetSheet(sheetIndex)
 	if sheet == nil {
-		return fmt.Errorf("This XLS file does not contain sheet no %d!", sheetIndex)
+		return fmt.Errorf("this XLS file does not contain sheet no %d", sheetIndex)
 	}
 	var need map[int]bool
 	if len(columns) != 0 {

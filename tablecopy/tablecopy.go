@@ -148,19 +148,23 @@ will execute a "SELECT * FROM Source_table@source_db WHERE F_ield=1" and an "INS
 		}
 	}
 
-	P, err := godror.ParseConnString(*flagSource)
+	P, err := godror.ParseDSN(*flagSource)
 	if err != nil {
 		return fmt.Errorf("%q: %w", *flagSource, err)
 	}
-	P.OnInit = mkInit(*flagSourcePrep)
+	if *flagSourcePrep != "" {
+		P.OnInit = mkInit(*flagSourcePrep)
+	}
 	srcConnector := godror.NewConnector(P)
 	srcDB := sql.OpenDB(srcConnector)
 	defer srcDB.Close()
 
-	if P, err = godror.ParseConnString(*flagDest); err != nil {
+	if P, err = godror.ParseDSN(*flagDest); err != nil {
 		return fmt.Errorf("%q: %w", *flagDest, err)
 	}
-	P.OnInit = mkInit(*flagDestPrep)
+	if *flagDestPrep != "" {
+		P.OnInit = mkInit(*flagDestPrep)
+	}
 	dstConnector := godror.NewConnector(P)
 	if err != nil {
 		return err

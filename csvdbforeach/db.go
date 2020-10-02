@@ -222,7 +222,7 @@ func getQuery(db querier, fun string, fixParams [][2]string) (Statement, error) 
 		return st, fmt.Errorf("%s: %w", qry, err)
 	}
 	if len(args) == 0 {
-		return st, fmt.Errorf("%s has no arguments!", fun)
+		return st, fmt.Errorf("%s has no arguments", fun)
 	}
 
 	st.Qry = "BEGIN "

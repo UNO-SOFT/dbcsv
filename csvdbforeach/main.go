@@ -46,7 +46,7 @@ func Main() error {
 			lang = lang[i+1:]
 			enc, err := htmlindex.Get(lang)
 			if err != nil {
-				return fmt.Errorf("Get encoding for %q: %w", lang, err)
+				return fmt.Errorf("get encoding for %q: %w", lang, err)
 			}
 			stdout = transform.NewWriter(stdout, enc.NewEncoder())
 			stderr = transform.NewWriter(stderr, enc.NewEncoder())

@@ -1,4 +1,4 @@
-// Copyright 2020, Tamás Gulácsi.
+// Copyright 2020 Tamás Gulácsi.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -69,14 +69,13 @@ func Main() error {
 	fs.BoolVar(&cfg.ForceString, "force-string", false, "force all columns to be VARCHAR2")
 	fs.BoolVar(&cfg.JustPrint, "just-print", false, "just print the INSERTs")
 	fs.StringVar(&cfg.Copy, "copy", "", "copy this table's structure")
-	fs.BoolVar(&cfg.CompressTemp, "compress-temp", false, "compress temporary file")
 	if *flagConnect == "" {
 		*flagConnect = os.Getenv("BRUNO_ID")
 	}
 	loadCmd := ffcli.Command{Name: "load", FlagSet: fs,
 		Exec: func(ctx context.Context, args []string) error {
 			if len(args) != 2 {
-				return errors.New("Need two args: the table and the source.")
+				return errors.New("need two args: the table and the source")
 			}
 			P, err := godror.ParseConnString(*flagConnect)
 			if err != nil {
