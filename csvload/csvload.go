@@ -258,7 +258,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		for row := range rows {
 			allEmpty := true
 			for i, s := range row.Values {
-				row.Values[i] = strings.TrimSpace(s)
+				row.Values[i] = s
 				allEmpty = allEmpty && row.Values[i] == ""
 			}
 			if allEmpty {
@@ -472,7 +472,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 			}
 			allEmpty := true
 			for i, s := range row.Values {
-				row.Values[i] = strings.TrimSpace(s)
+				row.Values[i] = s
 				allEmpty = allEmpty && row.Values[i] == ""
 			}
 			if allEmpty {
@@ -517,8 +517,7 @@ func typeOf(s string, forceString bool) Type {
 		return String
 	}
 
-	s = strings.TrimSpace(s)
-	if len(s) == 0 {
+	if s == "" {
 		return Unknown
 	}
 	var hasNonDigit bool
