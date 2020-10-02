@@ -334,6 +334,16 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		return err
 	}
 
+	var hasLOB bool
+	for _, c := range columns {
+		if hasLob = c.DataType == "CLOB" || c.DataType == "BLOB" ;hasLob {
+			break
+		}
+	}
+	if hasLOB {
+		chunkSize = 1
+	}
+	
 	start := time.Now()
 
 	type rowsType struct {
