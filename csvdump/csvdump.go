@@ -33,6 +33,8 @@ import (
 	"github.com/UNO-SOFT/spreadsheet/ods"
 	"github.com/UNO-SOFT/spreadsheet/xlsx"
 	"github.com/godror/godror"
+	"github.com/klauspost/compress/gzip"
+	"github.com/klauspost/compress/zstd"
 )
 
 func main() {
@@ -52,6 +54,7 @@ func Main() error {
 	flagSheets := dbcsv.FlagStrings()
 	flag.Var(flagSheets, "sheet", "each -sheet=name:SELECT will become a separate sheet on the output ods")
 	flagVerbose := flag.Bool("v", false, "verbose logging")
+	flagCompress := flag.String("compress", "", "compress output with gz/gzip or zst/zstd/zstandard")
 	flagCall := flag.Bool("call", false, "the first argument is not the WHERE, but the PL/SQL block to be called, the followings are not the columns but the arguments")
 
 	flag.Usage = func() {
@@ -161,6 +164,18 @@ and dump all the columns of the cursor returned by the function.
 		}
 	}
 	defer fh.Close()
+	wfh := io.WriteCloser(fh)
+	if *flagCompress != "" {
+		switch (strings.TrimSpace(strings.ToLower(*flagCompress)) + "  ")[:2] {
+		case "gz":
+			wfh = gzip.NewWriter(fh)
+		case "zs":
+			var err error
+			if wfh, err = zstd.NewWriter(fh); err != nil {
+				return err
+			}
+		}
+	}
 
 	if Log != nil {
 		Log("msg", "writing", "file", fh.Name(), "encoding", enc)
@@ -175,7 +190,7 @@ and dump all the columns of the cursor returned by the function.
 	defer tx.Rollback()
 
 	if len(flagSheets.Strings) == 0 {
-		w := io.Writer(encoding.ReplaceUnsupported(enc.NewEncoder()).Writer(fh))
+		w := io.Writer(encoding.ReplaceUnsupported(enc.NewEncoder()).Writer(wfh))
 		if Log != nil {
 			Log("env_encoding", dbcsv.DefaultEncoding.Name)
 		}
@@ -190,9 +205,9 @@ and dump all the columns of the cursor returned by the function.
 	} else {
 		var w spreadsheet.Writer
 		if strings.HasSuffix(fh.Name(), ".xlsx") {
-			w = xlsx.NewWriter(fh)
+			w = xlsx.NewWriter(wfh)
 		} else {
-			w, err = ods.NewWriter(fh)
+			w, err = ods.NewWriter(wfh)
 			if err != nil {
 				return err
 			}
@@ -249,6 +264,11 @@ and dump all the columns of the cursor returned by the function.
 		}
 	}
 	cancel()
+	if wfh != fh {
+		if closeErr := wfh.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}
 	if closeErr := fh.Close(); closeErr != nil && err == nil {
 		err = closeErr
 	}

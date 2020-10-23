@@ -2,6 +2,7 @@ module github.com/UNO-SOFT/dbcsv
 
 require (
 	github.com/360EntSecGroup-Skylar/excelize/v2 v2.3.1
+	github.com/DataDog/zstd v1.4.5
 	github.com/UNO-SOFT/spreadsheet v0.0.5
 	github.com/dvyukov/go-fuzz v0.0.0-20200318091601-be3528f3a813 // indirect
 	github.com/extrame/goyymmdd v0.0.0-20181026012948-914eb450555b // indirect
