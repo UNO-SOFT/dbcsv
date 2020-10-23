@@ -178,7 +178,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		panic("empty table")
 	}
 	tbl = strings.ToUpper(tbl)
-	tblFullInsert := strings.HasPrefix(tbl, "INSERT INTO ")
+	tblFullInsert := strings.HasPrefix(tbl, "INSERT /*+ APPEND */ INTO ")
 
 	var err error
 	if cfg.ForceString {
@@ -311,7 +311,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		}
 		columns = filterCols(columns, fields)
 		var buf strings.Builder
-		fmt.Fprintf(&buf, `INSERT INTO %s (`, tbl)
+		fmt.Fprintf(&buf, `INSERT /*+ APPEND */ INTO %s (`, tbl)
 		for i, c := range columns {
 			if i != 0 {
 				buf.WriteString(", ")
