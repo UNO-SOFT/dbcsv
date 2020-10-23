@@ -180,13 +180,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	tbl = strings.ToUpper(tbl)
 	tblFullInsert := strings.HasPrefix(tbl, "INSERT /*+ APPEND */ INTO ")
 
-	var err error
-	if cfg.ForceString {
-		err = cfg.OpenVolatile(src)
-	} else {
-		err = cfg.Open(src)
-	}
-	if err != nil {
+	if err := cfg.Open(src); err != nil {
 		return err
 	}
 	defer cfg.Close()
@@ -305,6 +299,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 			columns = append(columns, Column{Name: fmt.Sprintf("%d", i+1)})
 		}
 	} else {
+		var err error
 		columns, err = CreateTable(defCtx, db, tbl, rows, cfg.Truncate, cfg.Tablespace, cfg.Copy, cfg.ForceString)
 		if err != nil {
 			return err
@@ -330,7 +325,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	}
 	log.Println(qry)
 	defCancel()
-	if err = grp.Wait(); err != context.Canceled {
+	if err := grp.Wait(); err != context.Canceled {
 		return err
 	}
 
@@ -469,7 +464,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 
 	var headerSeen bool
 	chunk := (*(chunkPool.Get().(*[][]string)))[:0]
-	if err = cfg.ReadRows(grpCtx,
+	if err := cfg.ReadRows(grpCtx,
 		func(fn string, row dbcsv.Row) error {
 			var err error
 			if err = grpCtx.Err(); err != nil {
@@ -518,7 +513,8 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	}
 	close(rowsCh)
 
-	if err = grp.Wait(); err != nil {
+	err := grp.Wait()
+	if err != nil {
 		log.Printf("ERROR: %+v", err)
 	}
 	dur := time.Since(start)
