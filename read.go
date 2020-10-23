@@ -7,6 +7,7 @@ package dbcsv
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/csv"
 	"errors"
@@ -61,28 +62,56 @@ func EncFromName(e string) (NamedEncoding, error) {
 	return NamedEncoding{Encoding: encoding.Nop, Name: e}, fmt.Errorf("%s: %w", e, errors.New("unknown encoding"))
 }
 
-type FileType string
+type FType string
+
+type FileType struct {
+	Type        FType
+	Compression FType
+}
 
 const (
-	Unknown = FileType("")
-	Csv     = FileType("csv")
-	Xls     = FileType("xls")
-	XlsX    = FileType("xlsx")
+	Unknown = FType("")
+	Csv     = FType("csv")
+	Xls     = FType("xls")
+	XlsX    = FType("xlsx")
+	Gzip    = FType("gzip")
+	Zstd    = FType("zstd")
 )
 
 func DetectReaderType(r io.Reader, fileName string) (FileType, error) {
 	// detect file type
 	var b [4]byte
-	if _, err := io.ReadFull(r, b[:]); err != nil {
-		return Unknown, err
+	var buf bytes.Buffer
+	if _, err := io.ReadFull(io.TeeReader(r, &buf), b[:]); err != nil {
+		return FileType{Type: Unknown}, err
 	}
 	if bytes.Equal(b[:], []byte{0xd0, 0xcf, 0x11, 0xe0}) { // OLE2
-		return Xls, nil
+		return FileType{Type: Xls}, nil
 	} else if bytes.Equal(b[:], []byte{0x50, 0x4b, 0x03, 0x04}) { //PKZip, so xlsx
-		return XlsX, nil
+		return FileType{Type: XlsX}, nil
+	}
+	if bytes.Equal(b[:3], []byte{0x1f, 0x8b, 0x8}) { // GZIP
+		zr, err := gzip.NewReader(io.MultiReader(bytes.NewReader(buf.Bytes()), r))
+		if err != nil {
+			return FileType{Type: Csv}, nil
+		}
+		sub, err := DetectReaderType(zr, fileName)
+		zr.Close()
+		sub.Compression = Gzip
+		return sub, nil
+	}
+	if bytes.Equal(b[:], []byte{0x28, 0xb5, 0x2f, 0xfd}) { // Zstd
+		zr, err := zstd.NewReader(io.MultiReader(bytes.NewReader(buf.Bytes()), r))
+		if err != nil {
+			return FileType{Type: Csv}, nil
+		}
+		sub, err := DetectReaderType(zr, fileName)
+		zr.Close()
+		sub.Compression = Zstd
+		return sub, nil
 	}
 	// CSV
-	return Csv, nil
+	return FileType{Type: Csv}, nil
 }
 
 type Config struct {
@@ -147,7 +176,7 @@ func (cfg *Config) Rewind() error {
 }
 
 func (cfg *Config) Type() (FileType, error) {
-	if cfg.typ != Unknown {
+	if cfg.typ.Type != Unknown {
 		return cfg.typ, nil
 	}
 	var err error
@@ -158,20 +187,6 @@ func (cfg *Config) Type() (FileType, error) {
 	return cfg.typ, err
 }
 
-func (cfg *Config) OpenVolatile(fileName string) error {
-	cfg.fileName = fileName
-	if fileName == "-" || fileName == "" {
-		cfg.file, cfg.permanent = os.Stdin, false
-		return nil
-	}
-	var err error
-	if cfg.file, err = os.Open(fileName); err != nil {
-		return err
-	}
-	fi, err := cfg.file.Stat()
-	cfg.permanent = err == nil && fi.Mode().IsRegular()
-	return nil
-}
 func (cfg *Config) Open(fileName string) error {
 	slurp := fileName == "-" || fileName == ""
 	cfg.permanent = true
@@ -190,21 +205,47 @@ func (cfg *Config) Open(fileName string) error {
 		slurp = !fi.Mode().IsRegular()
 	}
 	var err error
+	var fh *os.File
 	if slurp {
-		fh, tmpErr := ioutil.TempFile("", "ReadRows-")
-		if tmpErr != nil {
+		var tmpErr error
+		if fh, tmpErr = ioutil.TempFile("", "ReadRows-"); tmpErr != nil {
 			return tmpErr
 		}
 		defer fh.Close()
 		fileName = fh.Name()
 		defer os.Remove(fileName)
-		var buf bytes.Buffer
-		r := io.Reader(cfg.file)
-		if cfg.typ, err = DetectReaderType(io.TeeReader(r, &buf), cfg.fileName); err != nil {
-			return err
+	}
+	var buf bytes.Buffer
+	r := io.Reader(cfg.file)
+	if cfg.typ, err = DetectReaderType(io.TeeReader(r, &buf), cfg.fileName); err != nil {
+		return err
+	}
+	r = io.MultiReader(bytes.NewReader(buf.Bytes()), r)
+
+	if cfg.typ.Compression != "" {
+		if cfg.typ.Compression == Gzip {
+			if r, err = gzip.NewReader(r); err != nil {
+				return err
+			}
+		} else if cfg.typ.Compression == Zstd {
+			if r, err = zstd.NewReader(r); err != nil {
+				return err
+			}
 		}
-		r = io.MultiReader(bytes.NewReader(buf.Bytes()), r)
-		compress := cfg.typ == Csv
+		if !slurp {
+			slurp = true
+			var tmpErr error
+			if fh, tmpErr = ioutil.TempFile("", "ReadRows-"); tmpErr != nil {
+				return tmpErr
+			}
+			defer fh.Close()
+			fileName = fh.Name()
+			defer os.Remove(fileName)
+		}
+	}
+
+	if slurp {
+		compress := cfg.typ.Type == Csv
 		w := io.WriteCloser(fh)
 		if compress {
 			if w, err = zstd.NewWriter(fh); err != nil {
@@ -251,7 +292,7 @@ func (cfg *Config) Open(fileName string) error {
 
 func (cfg *Config) Close() error {
 	zr, rdr, fh := cfg.zr, cfg.rdr, cfg.file
-	cfg.zr, cfg.rdr, cfg.file, cfg.fileName, cfg.typ = nil, nil, nil, "", Unknown
+	cfg.zr, cfg.rdr, cfg.file, cfg.fileName, cfg.typ = nil, nil, nil, "", FileType{Type: Unknown}
 	var err error
 	if zr != nil {
 		zr.Close()
@@ -279,7 +320,7 @@ func (cfg *Config) ReadRows(ctx context.Context, fn func(string, Row) error) (er
 			return err
 		}
 	}
-	switch cfg.typ {
+	switch cfg.typ.Type {
 	case Xls:
 		return ReadXLSFile(ctx, fn, cfg.fileName, cfg.Charset, cfg.Sheet, columns, cfg.Skip)
 	case XlsX:
@@ -302,7 +343,7 @@ func (cfg *Config) ReadSheets(ctx context.Context) (map[int]string, error) {
 			return nil, err
 		}
 	}
-	switch cfg.typ {
+	switch cfg.typ.Type {
 	case Xls:
 		wb, err := xls.Open(cfg.fileName, cfg.Charset)
 		if err != nil {
@@ -338,7 +379,7 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 	if err != nil {
 		return fmt.Errorf("open %q: %w", filename, err)
 	}
-	sheetName := xlFile.GetSheetName(sheetIndex)
+	sheetName := xlFile.GetSheetName(sheetIndex - 1)
 	if sheetName == "" {
 		return fmt.Errorf("%d (only: %v): %w", sheetIndex, xlFile.GetSheetMap(), ErrUnknownSheet)
 	}
