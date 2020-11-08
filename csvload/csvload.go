@@ -704,11 +704,11 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
 }
 
 type Column struct {
-	Length           int
 	Name             string
-	Type             Type
 	DataType         string
+	Length           int
 	Precision, Scale int
+	Type             Type
 	Nullable         bool
 }
 type Type uint8
