@@ -331,7 +331,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	}
 	log.Println(qry)
 	defCancel()
-	if err := grp.Wait(); err != context.Canceled {
+	if err := grp.Wait(); err != nil && err != context.Canceled {
 		return err
 	}
 
