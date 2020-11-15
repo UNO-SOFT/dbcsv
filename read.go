@@ -126,7 +126,6 @@ type Config struct {
 	file          *os.File
 	rdr           io.ReadCloser
 	zr            *zstd.Decoder
-	permanent     bool
 }
 
 func (cfg *Config) Encoding() (encoding.Encoding, error) {
@@ -142,21 +141,8 @@ func (cfg *Config) Encoding() (encoding.Encoding, error) {
 }
 
 func (cfg *Config) Columns() ([]int, error) {
-	if cfg.ColumnsString == "" {
-		return nil, nil
-	}
-	if cfg.columns != nil {
-		return cfg.columns, nil
-	}
-	cfg.columns = make([]int, 0, strings.Count(cfg.ColumnsString, ",")+1)
-	for _, x := range strings.Split(cfg.ColumnsString, ",") {
-		i, err := strconv.Atoi(x)
-		if err != nil {
-			return cfg.columns, fmt.Errorf("%s: %w", x, err)
-		}
-		cfg.columns = append(cfg.columns, i-1)
-	}
-	return cfg.columns, nil
+	err := cfg.parseColumnsString()
+	return cfg.columns, err
 }
 func (cfg *Config) Rewind() error {
 	if cfg.zr != nil {
@@ -189,7 +175,6 @@ func (cfg *Config) Type() (FileType, error) {
 
 func (cfg *Config) Open(fileName string) error {
 	slurp := fileName == "-" || fileName == ""
-	cfg.permanent = true
 	if slurp {
 		cfg.file, fileName = os.Stdin, "-"
 	} else {
@@ -205,16 +190,6 @@ func (cfg *Config) Open(fileName string) error {
 		slurp = !fi.Mode().IsRegular()
 	}
 	var err error
-	var fh *os.File
-	if slurp {
-		var tmpErr error
-		if fh, tmpErr = ioutil.TempFile("", "ReadRows-"); tmpErr != nil {
-			return tmpErr
-		}
-		defer fh.Close()
-		fileName = fh.Name()
-		defer os.Remove(fileName)
-	}
 	var buf bytes.Buffer
 	r := io.Reader(cfg.file)
 	if cfg.typ, err = DetectReaderType(io.TeeReader(r, &buf), cfg.fileName); err != nil {
@@ -232,19 +207,19 @@ func (cfg *Config) Open(fileName string) error {
 				return err
 			}
 		}
-		if !slurp {
-			slurp = true
-			var tmpErr error
-			if fh, tmpErr = ioutil.TempFile("", "ReadRows-"); tmpErr != nil {
-				return tmpErr
-			}
-			defer fh.Close()
-			fileName = fh.Name()
-			defer os.Remove(fileName)
-		}
+		slurp = true
 	}
 
+	var fh *os.File
 	if slurp {
+		var tmpErr error
+		if fh, tmpErr = ioutil.TempFile("", "ReadRows-"); tmpErr != nil {
+			return tmpErr
+		}
+		defer fh.Close()
+		fileName = fh.Name()
+		defer os.Remove(fileName)
+
 		compress := cfg.typ.Type == Csv
 		w := io.WriteCloser(fh)
 		if compress {
@@ -310,38 +285,48 @@ func (cfg *Config) ReadRows(ctx context.Context, fn func(string, Row) error) (er
 	if err = ctx.Err(); err != nil {
 		return err
 	}
-	columns, err := cfg.Columns()
-	if err != nil {
+	if err := cfg.parseColumnsString(); err != nil {
 		return err
 	}
 
-	if cfg.permanent {
-		if err = cfg.Rewind(); err != nil {
-			return err
-		}
+	if err := cfg.Rewind(); err != nil {
+		return err
 	}
 	switch cfg.typ.Type {
 	case Xls:
-		return ReadXLSFile(ctx, fn, cfg.fileName, cfg.Charset, cfg.Sheet, columns, cfg.Skip)
+		return ReadXLSFile(ctx, fn, cfg.fileName, cfg.Charset, cfg.Sheet, cfg.columns, cfg.Skip)
 	case XlsX:
-		return ReadXLSXFile(ctx, fn, cfg.fileName, cfg.Sheet, columns, cfg.Skip)
+		return ReadXLSXFile(ctx, fn, cfg.fileName, cfg.Sheet, cfg.columns, cfg.Skip)
 	}
 	enc, err := cfg.Encoding()
 	if err != nil {
 		return err
 	}
 	r := transform.NewReader(cfg.rdr, enc.NewDecoder())
-	return ReadCSV(ctx, func(row Row) error { return fn(cfg.fileName, row) }, r, cfg.Delim, columns, cfg.Skip)
+	return ReadCSV(ctx, func(row Row) error { return fn(cfg.fileName, row) }, r, cfg.Delim, cfg.columns, cfg.Skip)
+}
+func (cfg *Config) parseColumnsString() error {
+	if cfg.columns != nil || cfg.ColumnsString == "" {
+		return nil
+	}
+
+	cfg.columns = make([]int, 0, strings.Count(cfg.ColumnsString, ",")+1)
+	for _, x := range strings.Split(cfg.ColumnsString, ",") {
+		i, err := strconv.Atoi(x)
+		if err != nil {
+			return fmt.Errorf("%s: %w", x, err)
+		}
+		cfg.columns = append(cfg.columns, i-1)
+	}
+	return nil
 }
 
 func (cfg *Config) ReadSheets(ctx context.Context) (map[int]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if cfg.permanent {
-		if err := cfg.Rewind(); err != nil {
-			return nil, err
-		}
+	if err := cfg.Rewind(); err != nil {
+		return nil, err
 	}
 	switch cfg.typ.Type {
 	case Xls:
@@ -542,7 +527,8 @@ func ReadCSV(ctx context.Context, fn func(Row) error, r io.Reader, delim string,
 	cr.Comma = ([]rune(delim))[0]
 	cr.FieldsPerRecord = -1
 	cr.LazyQuotes = true
-	cr.ReuseRecord = false
+	cr.ReuseRecord = true
+	var colNames []string
 	n := 0
 	for {
 		row, err := cr.Read()
@@ -563,13 +549,17 @@ func ReadCSV(ctx context.Context, fn func(Row) error, r io.Reader, delim string,
 			}
 			row = r2
 		}
+		if colNames == nil {
+			colNames = append(make([]string, 0, len(row)), row...)
+		}
+
 		select {
 		default:
 		case <-ctx.Done():
 			log.Printf("Ctx: %v", ctx.Err())
 			return ctx.Err()
 		}
-		if err := fn(Row{Line: n - 1, Values: row}); err != nil {
+		if err := fn(Row{Columns: colNames, Line: n - 1, Values: row}); err != nil {
 			if err != context.Canceled {
 				log.Printf("Consume %d. row: %+v", n, err)
 			}
@@ -580,8 +570,9 @@ func ReadCSV(ctx context.Context, fn func(Row) error, r io.Reader, delim string,
 }
 
 type Row struct {
-	Line   int
-	Values []string
+	Line    int
+	Values  []string
+	Columns []string
 }
 
 func FlagStrings() *StringsValue {

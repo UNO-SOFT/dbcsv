@@ -222,6 +222,20 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 			pattern = strings.TrimSpace(strings.TrimPrefix(tbl[:j+1], "INSERT")) + pattern + "\n"
 		} else {
 			cols = filterCols(cols, fields)
+			if len(cols) == 0 {
+				for _, nm := range (<-rows).Values {
+					cols = append(cols, Column{Name: nm})
+				}
+			} else {
+				colMap := make(map[string]Column, len(cols))
+				for _, col := range cols {
+					colMap[col.Name] = col
+				}
+				cols = cols[:0]
+				for _, nm := range (<-rows).Values {
+					cols = append(cols, colMap[strings.ToUpper(nm)])
+				}
+			}
 			for i, col := range cols {
 				if i != 0 {
 					buf.Write([]byte{',', ' '})
@@ -229,14 +243,6 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 				buf.WriteString(col.Name)
 			}
 			pattern = "  INTO " + tbl + " (" + buf.String() + ") VALUES ("
-			colMap := make(map[string]Column, len(cols))
-			for _, col := range cols {
-				colMap[col.Name] = col
-			}
-			cols = cols[:0]
-			for _, nm := range (<-rows).Values {
-				cols = append(cols, colMap[strings.ToUpper(nm)])
-			}
 
 			buf.Reset()
 			for j := range cols {
@@ -874,7 +880,7 @@ func filterCols(cols []Column, fields []string) []Column {
 	}
 	columns := make([]Column, 0, len(fields))
 	for _, f := range fields {
-		if i, ok := m[strings.ToUpper(f)]; ok {
+		if i, ok := m[strings.ToUpper(f)]; ok || len(m) == 0 {
 			columns = append(columns, cols[i])
 		}
 	}
