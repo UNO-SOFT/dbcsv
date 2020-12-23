@@ -4,12 +4,14 @@ require (
 	github.com/360EntSecGroup-Skylar/excelize/v2 v2.3.1
 	github.com/DataDog/zstd v1.4.5
 	github.com/UNO-SOFT/spreadsheet v0.0.5
+	github.com/dvyukov/go-fuzz v0.0.0-20201003075337-90825f39c90b // indirect
 	github.com/extrame/goyymmdd v0.0.0-20181026012948-914eb450555b // indirect
 	github.com/extrame/ole2 v0.0.0-20160812065207-d69429661ad7 // indirect
 	github.com/extrame/xls v0.0.2-0.20180905092746-539786826ced
-	github.com/godror/godror v0.20.8
+	github.com/godror/godror v0.22.3
 	github.com/klauspost/compress v1.11.1
 	github.com/peterbourgon/ff/v3 v3.0.0
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/valyala/quicktemplate v1.6.2 // indirect
 	github.com/xuri/efp v0.0.0-20201016154823-031c29024257 // indirect
 	golang.org/dl v0.0.0-20200724191219-e4fbcf8a7a81 // indirect
