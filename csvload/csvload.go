@@ -48,7 +48,7 @@ type config struct {
 	dbcsv.Config
 	ForceString, JustPrint, Truncate bool
 	Tablespace, Copy                 string
-	Concurrency                      int
+	Concurrency, ChunkSize           int
 	WriteHeapProf                    func()
 }
 
@@ -69,6 +69,7 @@ func Main() error {
 	fs.BoolVar(&cfg.ForceString, "force-string", false, "force all columns to be VARCHAR2")
 	fs.BoolVar(&cfg.JustPrint, "just-print", false, "just print the INSERTs")
 	fs.StringVar(&cfg.Copy, "copy", "", "copy this table's structure")
+	fs.IntVar(&cfg.ChunkSize, "chunk-size", defaultChunkSize, "chunk size - number of rows inserted at once")
 	if *flagConnect == "" {
 		*flagConnect = os.Getenv("BRUNO_ID")
 	}
@@ -336,7 +337,10 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	}
 
 	var hasLOB bool
-	chunkSize := defaultChunkSize
+	chunkSize := cfg.ChunkSize
+	if chunkSize <= 0 {
+		chunkSize = defaultChunkSize
+	}
 	for _, c := range columns {
 		if hasLOB = c.DataType == "CLOB" || c.DataType == "BLOB"; hasLOB {
 			chunkSize = 1
@@ -475,7 +479,6 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 			var err error
 			if err = grpCtx.Err(); err != nil {
 				log.Printf("Grp: %+v", err)
-				chunk = chunk[:0]
 				return err
 			}
 
@@ -493,7 +496,11 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 			if allEmpty {
 				return nil
 			}
-			chunk = append(chunk, row.Values)
+			if chunkSize == 1 {
+				chunk = append(chunk, row.Values)
+			} else {
+				chunk = append(chunk, append(make([]string, 0, len(row.Values)), row.Values...))
+			}
 			if len(chunk) < chunkSize {
 				return nil
 			}
