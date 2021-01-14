@@ -496,11 +496,8 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 			if allEmpty {
 				return nil
 			}
-			if chunkSize == 1 {
-				chunk = append(chunk, row.Values)
-			} else {
-				chunk = append(chunk, append(make([]string, 0, len(row.Values)), row.Values...))
-			}
+			// Reader may reuse the Values slice
+			chunk = append(chunk, append(make([]string, 0, len(row.Values)), row.Values...))
 			if len(chunk) < chunkSize {
 				return nil
 			}
