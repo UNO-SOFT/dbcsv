@@ -1,3 +1,5 @@
+// Copyright 2021 Tamás Gulácsi. All rights reserved.
+
 // SPDX-License-Identifier: Apache-2.0
 
 // Package main in tablecopy is a table copier between databases.
@@ -13,6 +15,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
@@ -27,6 +30,8 @@ func main() {
 	}
 }
 
+const DefaultBatchSize = 8192
+
 func Main() error {
 	flagSource := flag.String("src", os.Getenv("DB_ID"), "user/passw@sid to read from")
 	flagSourcePrep := flag.String("src-prep", "", "prepare source connection (run statements separated by ;\\n)")
@@ -38,6 +43,7 @@ func Main() error {
 	flagTableTimeout := flag.Duration("table-timeout", 10*time.Second, "per-table-timeout")
 	flagConc := flag.Int("concurrency", 8, "concurrency")
 	flagTruncate := flag.Bool("truncate", false, "truncate dest tables (must have different name)")
+	flagBatchSize := flag.Int("batch-size", DefaultBatchSize, "batch size")
 
 	flag.Usage = func() {
 		fmt.Fprintln(flag.CommandLine.Output(), strings.Replace(`Usage of {{.prog}}:
@@ -148,24 +154,25 @@ will execute a "SELECT * FROM Source_table@source_db WHERE F_ield=1" and an "INS
 		}
 	}
 
-	P, err := godror.ParseDSN(*flagSource)
+	srcP, err := godror.ParseDSN(*flagSource)
 	if err != nil {
 		return fmt.Errorf("%q: %w", *flagSource, err)
 	}
 	if *flagSourcePrep != "" {
-		P.OnInit = mkInit(*flagSourcePrep)
+		srcP.OnInit = mkInit(*flagSourcePrep)
 	}
-	srcConnector := godror.NewConnector(P)
+	srcConnector := godror.NewConnector(srcP)
 	srcDB := sql.OpenDB(srcConnector)
 	defer srcDB.Close()
 
-	if P, err = godror.ParseDSN(*flagDest); err != nil {
+	dstP, err := godror.ParseDSN(*flagDest)
+	if err != nil {
 		return fmt.Errorf("%q: %w", *flagDest, err)
 	}
 	if *flagDestPrep != "" {
-		P.OnInit = mkInit(*flagDestPrep)
+		dstP.OnInit = mkInit(*flagDestPrep)
 	}
-	dstConnector := godror.NewConnector(P)
+	dstConnector := godror.NewConnector(dstP)
 	if err != nil {
 		return err
 	}
@@ -198,10 +205,18 @@ will execute a "SELECT * FROM Source_table@source_db WHERE F_ield=1" and an "INS
 		}
 		if task.Dst == "" {
 			task.Dst = task.Src
-		} else if !strings.EqualFold(task.Dst, task.Src) {
+		}
+		if !strings.EqualFold(task.Dst, task.Src) || dstP.String() != srcP.String() {
 			dstDB.ExecContext(subCtx, fmt.Sprintf("CREATE TABLE %s AS SELECT * FROM %s WHERE 1=0", task.Dst, task.Src))
 			if task.Truncate {
-				dstDB.ExecContext(subCtx, "TRUNCATE TABLE "+task.Dst)
+				if Log != nil {
+					Log("msg", "TRUNCATE", "table", task.Dst)
+				}
+				if _, err := dstDB.ExecContext(subCtx, "TRUNCATE TABLE "+task.Dst); err != nil {
+					if _, err = dstDB.ExecContext(subCtx, "DELETE FROM "+task.Dst); err != nil {
+						return fmt.Errorf("TRUNCATE TABLE %s: %w", task.Dst, err)
+					}
+				}
 			}
 		}
 	}
@@ -219,7 +234,7 @@ will execute a "SELECT * FROM Source_table@source_db WHERE F_ield=1" and an "INS
 			}
 			start := time.Now()
 			oneCtx, oneCancel := context.WithTimeout(subCtx, *flagTableTimeout)
-			n, err := One(oneCtx, dstTx, srcTx, task, Log)
+			n, err := One(oneCtx, dstTx, srcTx, task, *flagBatchSize, Log)
 			oneCancel()
 			dur := time.Since(start)
 			log.Println(task.Src, n, dur)
@@ -238,7 +253,7 @@ type copyTask struct {
 	Truncate        bool
 }
 
-func One(ctx context.Context, dstTx, srcTx *sql.Tx, task copyTask, Log func(...interface{}) error) (int64, error) {
+func One(ctx context.Context, dstTx, srcTx *sql.Tx, task copyTask, batchSize int, Log func(...interface{}) error) (int64, error) {
 	if task.Dst == "" {
 		task.Dst = task.Src
 	}
@@ -257,9 +272,9 @@ func One(ctx context.Context, dstTx, srcTx *sql.Tx, task copyTask, Log func(...i
 		m[c] = struct{}{}
 	}
 
-	var srcQry, dstQry, ph strings.Builder
-	srcQry.WriteString("SELECT ")
-	fmt.Fprintf(&dstQry, "INSERT INTO %s (", task.Dst)
+	var srcBld, dstBld, ph strings.Builder
+	srcBld.WriteString("SELECT ")
+	fmt.Fprintf(&dstBld, "INSERT INTO %s (", task.Dst)
 	var i int
 	tbr := make([]string, 0, len(task.Replace))
 	for _, k := range srcCols {
@@ -271,57 +286,99 @@ func One(ctx context.Context, dstTx, srcTx *sql.Tx, task copyTask, Log func(...i
 			continue
 		}
 		if i != 0 {
-			srcQry.WriteByte(',')
-			dstQry.WriteByte(',')
+			srcBld.WriteByte(',')
+			dstBld.WriteByte(',')
 			ph.WriteByte(',')
 		}
 		i++
-		srcQry.WriteString(k)
-		dstQry.WriteString(k)
+		srcBld.WriteString(k)
+		dstBld.WriteString(k)
 		fmt.Fprintf(&ph, ":%d", i)
 	}
 	for _, k := range tbr {
-		dstQry.WriteByte(',')
-		dstQry.WriteString(k)
+		dstBld.WriteByte(',')
+		dstBld.WriteString(k)
 		ph.WriteString(",'")
 		ph.WriteString(strings.ReplaceAll(task.Replace[k], "'", "''"))
 		ph.WriteByte('\'')
 	}
-	fmt.Fprintf(&srcQry, " FROM %s", task.Src)
+	fmt.Fprintf(&srcBld, " FROM %s", task.Src)
 	if task.Where != "" {
-		fmt.Fprintf(&srcQry, " WHERE %s", task.Where)
+		fmt.Fprintf(&srcBld, " WHERE %s", task.Where)
 	}
-	fmt.Fprintf(&dstQry, ") VALUES (%s)", ph.String())
+	fmt.Fprintf(&dstBld, ") VALUES (%s)", ph.String())
 
-	stmt, err := dstTx.PrepareContext(ctx, dstQry.String())
+	srcQry, dstQry := srcBld.String(), dstBld.String()
+	stmt, err := dstTx.PrepareContext(ctx, dstQry)
 	if err != nil {
-		return n, fmt.Errorf("%s: %w", dstQry.String(), err)
+		return n, fmt.Errorf("%s: %w", dstQry, err)
 	}
 	defer stmt.Close()
 	if Log != nil {
-		Log("src", dstQry.String())
-		Log("dst", srcQry.String())
+		Log("src", srcQry)
+		Log("dst", dstQry)
 	}
 
-	rows, err := srcTx.QueryContext(ctx, srcQry.String())
+	if batchSize < 1 {
+		batchSize = DefaultBatchSize
+	}
+	rows, err := srcTx.QueryContext(ctx, srcQry,
+		godror.FetchArraySize(batchSize), godror.PrefetchCount(batchSize+1))
 	if err != nil {
-		return n, fmt.Errorf("%s: %w", srcQry.String(), err)
+		return n, fmt.Errorf("%s: %w", srcQry, err)
 	}
 	defer rows.Close()
-
-	values := make([]interface{}, i)
-	for i := range values {
-		var x interface{}
-		values[i] = &x
+	types, err := rows.ColumnTypes()
+	if err != nil {
+		return n, fmt.Errorf("%s: %w", srcQry, err)
 	}
+
+	values := make([]interface{}, len(types))
+	rBatch := make([]reflect.Value, len(values))
+	batchValues := make([]interface{}, 0, len(rBatch))
+	for i, t := range types {
+		et := t.ScanType()
+		values[i] = reflect.New(et).Interface()
+		rBatch[i] = reflect.MakeSlice(reflect.SliceOf(et), 0, batchSize)
+	}
+	doInsert := func() error {
+		if len(batchValues) == 0 {
+			for _, v := range rBatch {
+				batchValues = append(batchValues, v.Interface())
+			}
+		}
+		if Log != nil {
+			Log("msg", "INSERT", "len", m)
+		}
+		if _, err = stmt.ExecContext(ctx, batchValues...); err != nil {
+			return fmt.Errorf("%s %v: %w", dstQry, batchValues, err)
+		}
+		return nil
+	}
+
 	for rows.Next() {
 		if err = rows.Scan(values...); err != nil {
 			return n, err
 		}
-		if _, err = stmt.ExecContext(ctx, values...); err != nil {
-			return n, fmt.Errorf("%s %v: %w", dstQry.String(), values, err)
+		for i, v := range values {
+			rBatch[i] = reflect.Append(rBatch[i], reflect.ValueOf(v).Elem())
 		}
-		n++
+		if m := rBatch[0].Len(); m == batchSize {
+			if err = doInsert(); err != nil {
+				return n, err
+			}
+
+			n += int64(m)
+			for i := range rBatch {
+				rBatch[i] = rBatch[i].Slice(0, 0)
+			}
+		}
+	}
+	if m := rBatch[0].Len(); m != 0 {
+		if err = doInsert(); err != nil {
+			return n, fmt.Errorf("%s %v: %w", dstQry, batchValues, err)
+		}
+		n += int64(m)
 	}
 	return n, nil
 }
