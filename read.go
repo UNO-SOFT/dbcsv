@@ -399,12 +399,18 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 		default:
 		}
 		xfs := xlFile.Styles.CellXfs.Xf
+		var numN int
+		if xlFile.Styles.NumFmts != nil {
+			numN = len(xlFile.Styles.NumFmts.NumFmt)
+		}
+		dateFmts := make(map[int]struct{}, 5+numN)
 		var token struct{}
-		dateFmts := make(map[int]struct{}, 5+len(xlFile.Styles.NumFmts.NumFmt))
 		dateFmts[14], dateFmts[15], dateFmts[16], dateFmts[17], dateFmts[22] = token, token, token, token, token
-		for _, nf := range xlFile.Styles.NumFmts.NumFmt {
-			if strings.Contains(nf.FormatCode, "yy") {
-				dateFmts[nf.NumFmtID] = token
+		if xlFile.Styles.NumFmts != nil {
+			for _, nf := range xlFile.Styles.NumFmts.NumFmt {
+				if strings.Contains(nf.FormatCode, "yy") {
+					dateFmts[nf.NumFmtID] = token
+				}
 			}
 		}
 		for j := range raw {
