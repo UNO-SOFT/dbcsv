@@ -25,7 +25,7 @@ import (
 	"golang.org/x/text/encoding/htmlindex"
 	"golang.org/x/text/transform"
 
-	"github.com/360EntSecGroup-Skylar/excelize/v2"
+	"github.com/UNO-SOFT/excelize/v2"
 	"github.com/extrame/xls"
 	"github.com/klauspost/compress/zstd"
 )
