@@ -8,9 +8,11 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base32"
 	"errors"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"log"
 	"os"
@@ -615,33 +617,7 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
 		log.Printf("row: %v", row.Values)
 		cols = make([]Column, len(row.Values))
 		for i, v := range row.Values {
-			v = strings.Map(func(r rune) rune {
-				r = unicode.ToLower(r)
-				switch r {
-				case 'á':
-					return 'a'
-				case 'é':
-					return 'e'
-				case 'í':
-					return 'i'
-				case 'ö', 'ő', 'ó':
-					return 'o'
-				case 'ü', 'ű', 'ú':
-					return 'u'
-				case '_':
-					return '_'
-				default:
-					if 'a' <= r && r <= 'z' || '0' <= r && r <= '9' {
-						return r
-					}
-					return '_'
-				}
-			},
-				v)
-			if len(v) > 30 {
-				v = fmt.Sprintf("%s_%02d", v[:27], i)
-			}
-			cols[i].Name = v
+			cols[i].Name = mkColName(v)
 		}
 		if forceString {
 			for i := range cols {
@@ -889,6 +865,39 @@ func filterCols(cols []Column, fields []string) []Column {
 		}
 	}
 	return columns
+}
+
+func mkColName(v string) string {
+	v = strings.Map(func(r rune) rune {
+		r = unicode.ToLower(r)
+		switch r {
+		case 'á':
+			return 'a'
+		case 'é':
+			return 'e'
+		case 'í':
+			return 'i'
+		case 'ö', 'ő', 'ó':
+			return 'o'
+		case 'ü', 'ű', 'ú':
+			return 'u'
+		case '_':
+			return '_'
+		default:
+			if 'a' <= r && r <= 'z' || '0' <= r && r <= '9' {
+				return r
+			}
+			return '_'
+		}
+	},
+		v)
+	if len(v) <= 30 {
+		return v
+	}
+	hsh := fnv.New32()
+	hsh.Write([]byte(v))
+	var a [4]byte
+	return v[:30-7] + base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(hsh.Sum(a[:0]))
 }
 
 // vim: set fileencoding=utf-8 noet:

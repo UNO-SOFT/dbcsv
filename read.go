@@ -98,7 +98,7 @@ func DetectReaderType(r io.Reader, fileName string) (FileType, error) {
 		sub, err := DetectReaderType(zr, fileName)
 		zr.Close()
 		sub.Compression = Gzip
-		return sub, nil
+		return sub, err
 	}
 	if bytes.Equal(b[:], []byte{0x28, 0xb5, 0x2f, 0xfd}) { // Zstd
 		zr, err := zstd.NewReader(io.MultiReader(bytes.NewReader(buf.Bytes()), r))
@@ -108,7 +108,7 @@ func DetectReaderType(r io.Reader, fileName string) (FileType, error) {
 		sub, err := DetectReaderType(zr, fileName)
 		zr.Close()
 		sub.Compression = Zstd
-		return sub, nil
+		return sub, err
 	}
 	// CSV
 	return FileType{Type: Csv}, nil
