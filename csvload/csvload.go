@@ -1,4 +1,4 @@
-// Copyright 2020 Tamás Gulácsi.
+// Copyright 2021 Tamás Gulácsi.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -41,8 +41,12 @@ func main() {
 	}
 }
 
-var dateFormat = "2006-01-02 15:04:05"
-var xlsEpoch = time.Date(1899, 12, 30, 0, 0, 0, 0, time.Local)
+var (
+	dateFormat = "2006-01-02 15:04:05"
+	xlsEpoch   = time.Date(1899, 12, 30, 0, 0, 0, 0, time.Local)
+
+	ErrTooManyFields = errors.New("too many fields")
+)
 
 const defaultChunkSize = 1024
 
@@ -189,6 +193,9 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	defer cfg.Close()
 
 	rows := make(chan dbcsv.Row)
+	var firstRow dbcsv.Row
+	var firstRowWg sync.WaitGroup
+	firstRowWg.Add(1)
 
 	defCtx, defCancel := context.WithCancel(ctx)
 	defer defCancel()
@@ -197,6 +204,8 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		defer close(rows)
 		return cfg.ReadRows(grpCtx,
 			func(_ string, row dbcsv.Row) error {
+				firstRow = row
+				firstRowWg.Done()
 				select {
 				case <-grpCtx.Done():
 					return grpCtx.Err()
@@ -206,6 +215,10 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 			},
 		)
 	})
+	firstRowWg.Wait()
+	if len(fields) == 0 {
+		fields = firstRow.Columns
+	}
 
 	if cfg.JustPrint {
 		fmt.Println("INSERT ALL")
@@ -400,7 +413,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 				for k, row := range chunk {
 					if len(row) > len(cols) {
 						if row[len(row)-1] != "" {
-							log.Printf("%d. more elements in the row (%d) then columns (%d)!", rs.Start+int64(k), len(row), len(cols))
+							return fmt.Errorf("%d. more elements in the row (%d) then columns (%d): %w", rs.Start+int64(k), len(row), len(cols), ErrTooManyFields)
 						}
 						row = row[:len(cols)]
 					}
