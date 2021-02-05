@@ -864,16 +864,22 @@ func quote(w io.Writer, s string) error {
 }
 
 func filterCols(cols []Column, fields []string) []Column {
-	if len(fields) == 0 {
+	if len(fields) == 0 || len(cols) == 0 {
 		return cols
 	}
 	m := make(map[string]int, len(cols))
 	for i, c := range cols {
 		m[c.Name] = i
+		// Try alternate name, except it would overwrite
+		if strings.HasPrefix(c.Name, "F_") {
+			if _, ok := m[c.Name[2:]]; !ok {
+				m[c.Name[2:]] = i
+			}
+		}
 	}
 	columns := make([]Column, 0, len(fields))
 	for _, f := range fields {
-		if i, ok := m[strings.ToUpper(f)]; ok || len(m) == 0 {
+		if i, ok := m[strings.ToUpper(f)]; ok {
 			columns = append(columns, cols[i])
 		}
 	}
