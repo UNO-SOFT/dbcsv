@@ -428,8 +428,8 @@ func dumpSheet(ctx context.Context, sheet spreadsheet.Sheet, rows *sql.Rows, col
 }
 
 type Column struct {
-	Name string
 	reflect.Type
+	Name string
 }
 
 func (col Column) Converter(sep string) stringer {

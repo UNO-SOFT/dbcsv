@@ -126,10 +126,10 @@ type ConvFunc func(string) (interface{}, error)
 
 type Statement struct {
 	Qry        string
-	Returns    bool
 	Converters []ConvFunc
-	ParamCount int
 	FixParams  []interface{}
+	ParamCount int
+	Returns    bool
 }
 
 type querier interface {

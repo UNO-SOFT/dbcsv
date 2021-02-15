@@ -248,8 +248,8 @@ will execute a "SELECT * FROM Source_table@source_db WHERE F_ield=1" and an "INS
 }
 
 type copyTask struct {
-	Src, Dst, Where string
 	Replace         map[string]string
+	Src, Dst, Where string
 	Truncate        bool
 }
 

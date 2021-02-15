@@ -51,11 +51,11 @@ var (
 const defaultChunkSize = 1024
 
 type config struct {
+	WriteHeapProf    func()
+	Tablespace, Copy string
 	dbcsv.Config
-	ForceString, JustPrint, Truncate bool
-	Tablespace, Copy                 string
 	Concurrency, ChunkSize           int
-	WriteHeapProf                    func()
+	ForceString, JustPrint, Truncate bool
 }
 
 func Main() error {

@@ -115,17 +115,17 @@ func DetectReaderType(r io.Reader, fileName string) (FileType, error) {
 }
 
 type Config struct {
+	rdr           io.ReadCloser
+	encoding      encoding.Encoding
+	file          *os.File
+	zr            *zstd.Decoder
 	typ           FileType
-	Sheet, Skip   int
 	Delim         string
 	Charset       string
 	ColumnsString string
-	encoding      encoding.Encoding
-	columns       []int
 	fileName      string
-	file          *os.File
-	rdr           io.ReadCloser
-	zr            *zstd.Decoder
+	columns       []int
+	Sheet, Skip   int
 }
 
 func (cfg *Config) Encoding() (encoding.Encoding, error) {
@@ -576,9 +576,9 @@ func ReadCSV(ctx context.Context, fn func(Row) error, r io.Reader, delim string,
 }
 
 type Row struct {
-	Line    int
 	Values  []string
 	Columns []string
+	Line    int
 }
 
 func FlagStrings() *StringsValue {
