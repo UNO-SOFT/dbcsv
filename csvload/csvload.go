@@ -194,18 +194,19 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 
 	rows := make(chan dbcsv.Row)
 	var firstRow dbcsv.Row
-	var firstRowWg sync.WaitGroup
-	firstRowWg.Add(1)
+	firstRowErr := make(chan error, 2)
 
 	defCtx, defCancel := context.WithCancel(ctx)
 	defer defCancel()
 	grp, grpCtx := errgroup.WithContext(defCtx)
 	grp.Go(func() error {
 		defer close(rows)
-		return cfg.ReadRows(grpCtx,
+		err := cfg.ReadRows(grpCtx,
 			func(_ string, row dbcsv.Row) error {
-				firstRow = row
-				firstRowWg.Done()
+				if firstRow.Values == nil {
+					firstRow = row
+					firstRowErr<- nil
+				}
 				select {
 				case <-grpCtx.Done():
 					return grpCtx.Err()
@@ -214,8 +215,17 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 				return nil
 			},
 		)
+		firstRowErr <- err
+		return err
 	})
-	firstRowWg.Wait()
+	select {
+	case err := <-firstRowErr:
+		if err != nil {
+			return err
+		}
+	case <-grpCtx.Done():
+		return grpCtx.Err()
+	}
 	if len(fields) == 0 {
 		fields = firstRow.Columns
 	}
@@ -239,7 +249,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		} else {
 			cols = filterCols(cols, fields)
 			if len(cols) == 0 {
-				for _, nm := range (<-rows).Values {
+				for _, nm := range firstRow.Values {
 					cols = append(cols, Column{Name: nm})
 				}
 			} else {
@@ -248,7 +258,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 					colMap[col.Name] = col
 				}
 				cols = cols[:0]
-				for _, nm := range (<-rows).Values {
+				for _, nm := range firstRow.Values {
 					cols = append(cols, colMap[strings.ToUpper(nm)])
 				}
 			}
