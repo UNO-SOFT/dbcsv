@@ -9,7 +9,7 @@ require (
 	github.com/extrame/goyymmdd v0.0.0-20181026012948-914eb450555b // indirect
 	github.com/extrame/ole2 v0.0.0-20160812065207-d69429661ad7 // indirect
 	github.com/extrame/xls v0.0.2-0.20180905092746-539786826ced
-	github.com/godror/godror v0.23.1
+	github.com/godror/godror v0.24.0
 	github.com/klauspost/compress v1.11.1
 	github.com/peterbourgon/ff/v3 v3.0.0
 	github.com/pkg/errors v0.9.1 // indirect
