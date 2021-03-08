@@ -318,6 +318,7 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 	var err error
 	const batchSize = 1024
 	if !isCall {
+		origQry := qry
 		if doSort && strings.HasPrefix(qry, "SELECT * FROM") {
 			rows, err := db.QueryContext(ctx, qry+" FETCH FIRST ROW ONLY")
 			if err != nil {
@@ -325,23 +326,32 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 					return nil, nil, fmt.Errorf("%s: %w", qry, err)
 				}
 			}
-			cols, err := rows.Columns()
+			cols, err := rows.ColumnTypes()
 			rows.Close()
 			if err != nil {
 				return nil, nil, fmt.Errorf("%s: %w", qry, err)
 			}
 			var bld strings.Builder
-			bld.WriteString(qry)
-			bld.WriteString(" ORDER BY ")
-			for i := range cols {
-				if i != 0 {
+			for i, c := range cols {
+				if strings.HasSuffix(c.DatabaseTypeName(), "LOB") {
+					continue
+				}
+				if i == 0 {
+					bld.WriteString(qry)
+					bld.WriteString(" ORDER BY ")
+				} else {
 					bld.WriteByte(',')
 				}
 				fmt.Fprintf(&bld, "%d", i+1)
 			}
-			qry = bld.String()
+			if bld.Len() != 0 {
+				qry = bld.String()
+			}
 		}
-		rows, err = db.QueryContext(ctx, qry, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize))
+		if rows, err = db.QueryContext(ctx, qry, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize)); err != nil {
+			qry = origQry
+			rows, err = db.QueryContext(ctx, qry, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize))
+		}
 	} else {
 		var dRows driver.Rows
 		params = append(append(make([]interface{}, 0, 2+len(params)),
