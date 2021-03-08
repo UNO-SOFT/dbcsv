@@ -51,6 +51,7 @@ func Main() error {
 	flagEnc := flag.String("encoding", dbcsv.DefaultEncoding.Name, "encoding to use for output")
 	flagOut := flag.String("o", "-", "output (defaults to stdout)")
 	flagRaw := flag.Bool("raw", false, "not real csv, just dump the raw data")
+	flagSort := flag.Bool("sort", false, "sort data")
 	flagSheets := dbcsv.FlagStrings()
 	flag.Var(flagSheets, "sheet", "each -sheet=name:SELECT will become a separate sheet on the output ods")
 	flagVerbose := flag.Bool("v", false, "verbose logging")
@@ -195,7 +196,7 @@ and dump all the columns of the cursor returned by the function.
 			Log("env_encoding", dbcsv.DefaultEncoding.Name)
 		}
 
-		rows, columns, qErr := doQuery(ctx, tx, queries[0], params, *flagCall)
+		rows, columns, qErr := doQuery(ctx, tx, queries[0], params, *flagCall, *flagSort)
 		if qErr != nil {
 			err = qErr
 		} else {
@@ -228,7 +229,7 @@ and dump all the columns of the cursor returned by the function.
 			if name == "" {
 				name = strconv.Itoa(sheetNo + 1)
 			}
-			rows, columns, qErr := doQuery(ctx, tx, qry, nil, false)
+			rows, columns, qErr := doQuery(ctx, tx, qry, nil, false, *flagSort)
 			if qErr != nil {
 				err = qErr
 				break
@@ -312,11 +313,34 @@ type queryExecer interface {
 	execer
 }
 
-func doQuery(ctx context.Context, db queryExecer, qry string, params []interface{}, isCall bool) (*sql.Rows, []Column, error) {
+func doQuery(ctx context.Context, db queryExecer, qry string, params []interface{}, isCall, doSort bool) (*sql.Rows, []Column, error) {
 	var rows *sql.Rows
 	var err error
 	const batchSize = 1024
 	if !isCall {
+		if doSort && strings.HasPrefix(qry, "SELECT * FROM") {
+			rows, err := db.QueryContext(ctx, qry+" FETCH FIRST ROW ONLY")
+			if err != nil {
+				if rows, err = db.QueryContext(ctx, qry); err != nil {
+					return nil, nil, fmt.Errorf("%s: %w", qry, err)
+				}
+			}
+			cols, err := rows.Columns()
+			rows.Close()
+			if err != nil {
+				return nil, nil, fmt.Errorf("%s: %w", qry, err)
+			}
+			var bld strings.Builder
+			bld.WriteString(qry)
+			bld.WriteString(" ORDER BY ")
+			for i := range cols {
+				if i != 0 {
+					bld.WriteByte(',')
+				}
+				fmt.Fprintf(&bld, "%d", i+1)
+			}
+			qry = bld.String()
+		}
 		rows, err = db.QueryContext(ctx, qry, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize))
 	} else {
 		var dRows driver.Rows
