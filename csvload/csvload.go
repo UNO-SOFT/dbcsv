@@ -203,7 +203,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		defer close(rows)
 		err := cfg.ReadRows(grpCtx,
 			func(_ string, row dbcsv.Row) error {
-				if firstRow.Values == nil {
+				if firstRow.Columns == nil {
 					firstRow = row
 					firstRowErr<- nil
 				}
@@ -249,7 +249,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		} else {
 			cols = filterCols(cols, fields)
 			if len(cols) == 0 {
-				for _, nm := range firstRow.Values {
+				for _, nm := range firstRow.Columns {
 					cols = append(cols, Column{Name: nm})
 				}
 			} else {
@@ -258,7 +258,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 					colMap[col.Name] = col
 				}
 				cols = cols[:0]
-				for _, nm := range firstRow.Values {
+				for _, nm := range firstRow.Columns {
 					cols = append(cols, colMap[strings.ToUpper(nm)])
 				}
 			}
