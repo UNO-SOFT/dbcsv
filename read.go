@@ -364,9 +364,21 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 	if err != nil {
 		return fmt.Errorf("open %q: %w", filename, err)
 	}
-	sheetName := xlFile.GetSheetName(sheetIndex - 1)
+	sheetName := xlFile.GetSheetName(sheetIndex)
 	if sheetName == "" {
-		return fmt.Errorf("%d (only: %v): %w", sheetIndex, xlFile.GetSheetMap(), ErrUnknownSheet)
+		m := xlFile.GetSheetMap()
+		if sheetName = m[sheetIndex]; sheetName == "" {
+			if sheetName = m[sheetIndex-1]; sheetName == "" {
+				if len(m) == 1 {
+					for _, sheetName = range m {
+						break
+					}
+				}
+			}
+		}
+		if sheetName == "" {
+			return fmt.Errorf("%d (only: %v): %w", sheetIndex, m, ErrUnknownSheet)
+		}
 	}
 	n := 0
 	var need map[int]bool
