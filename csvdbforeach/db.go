@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	dateFormat     = dbcsv.DateFormat
-	dateTimeFormat = dbcsv.DateTimeFormat
+	DateFormat     = "20060102"
+	DateTimeFormat = "20060102150405"
 )
 
 func dbExec(db *sql.DB, fun string, fixParams [][2]string, retOk int64, rows <-chan dbcsv.Row, oneTx bool) (int, error) {
@@ -32,7 +32,7 @@ func dbExec(db *sql.DB, fun string, fixParams [][2]string, retOk int64, rows <-c
 	var (
 		stmt     *sql.Stmt
 		tx       *sql.Tx
-		values   []interface{}
+		values   = make([]interface{}, 0, st.ParamCount)
 		startIdx int
 		ret      int64
 		n        int
@@ -287,9 +287,9 @@ func strToDate(s string) (interface{}, error) {
 	var nt sql.NullTime
 	var err error
 	if len(s) < 14 {
-		nt.Time, err = time.ParseInLocation(dateFormat, s[:8], time.Local)
+		nt.Time, err = time.ParseInLocation(DateFormat, s[:8], time.Local)
 	} else {
-		nt.Time, err = time.ParseInLocation(dateTimeFormat, s, time.Local)
+		nt.Time, err = time.ParseInLocation(DateTimeFormat, s, time.Local)
 	}
 	nt.Valid = err == nil && !nt.Time.IsZero()
 	return nt, err

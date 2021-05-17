@@ -1,4 +1,4 @@
-// Copyright 2020, Tamás Gulácsi.
+// Copyright 2020, 2021 Tamás Gulácsi.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -350,11 +350,6 @@ func (cfg *Config) ReadSheets(ctx context.Context) (map[int]string, error) {
 	// CSV
 	return map[int]string{1: cfg.fileName}, nil
 }
-
-const (
-	DateFormat     = "20060102"
-	DateTimeFormat = "20060102150405"
-)
 
 func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename string, sheetIndex int, columns []int, skip int) error {
 	if err := ctx.Err(); err != nil {
