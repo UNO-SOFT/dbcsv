@@ -203,9 +203,9 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		defer close(rows)
 		err := cfg.ReadRows(grpCtx,
 			func(_ string, row dbcsv.Row) error {
-				if firstRow.Values == nil {
+				if firstRow.Columns == nil {
 					firstRow = row
-					firstRowErr<- nil
+					firstRowErr <- nil
 				}
 				select {
 				case <-grpCtx.Done():
@@ -229,6 +229,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	if len(fields) == 0 {
 		fields = firstRow.Columns
 	}
+	log.Println("fields: ", fields)
 
 	if cfg.JustPrint {
 		fmt.Println("INSERT ALL")
@@ -249,7 +250,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		} else {
 			cols = filterCols(cols, fields)
 			if len(cols) == 0 {
-				for _, nm := range firstRow.Values {
+				for _, nm := range firstRow.Columns {
 					cols = append(cols, Column{Name: nm})
 				}
 			} else {
@@ -258,7 +259,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 					colMap[col.Name] = col
 				}
 				cols = cols[:0]
-				for _, nm := range firstRow.Values {
+				for _, nm := range firstRow.Columns {
 					cols = append(cols, colMap[strings.ToUpper(nm)])
 				}
 			}
@@ -332,7 +333,15 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		}
 	} else {
 		var err error
-		columns, err = CreateTable(defCtx, db, tbl, rows, cfg.Truncate, cfg.Tablespace, cfg.Copy, cfg.ForceString)
+		ctRows := make(chan dbcsv.Row, 1)
+		ctRows <- firstRow
+		go func() {
+			defer close(ctRows)
+			for row := range rows {
+				ctRows <- row
+			}
+		}()
+		columns, err = CreateTable(defCtx, db, tbl, ctRows, cfg.Truncate, cfg.Tablespace, cfg.Copy, cfg.ForceString)
 		if err != nil {
 			return err
 		}
@@ -637,9 +646,9 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
 		}
 	} else if n == 0 && copyTable == "" {
 		row := <-rows
-		log.Printf("row: %v", row.Values)
-		cols = make([]Column, len(row.Values))
-		for i, v := range row.Values {
+		log.Printf("row: %v", row.Columns)
+		cols = make([]Column, len(row.Columns))
+		for i, v := range row.Columns {
 			cols[i].Name = mkColName(v)
 		}
 		if forceString {

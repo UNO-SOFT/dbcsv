@@ -1,4 +1,4 @@
-// Copyright 2020, Tamás Gulácsi.
+// Copyright 2020, 2021 Tamás Gulácsi.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -351,11 +351,6 @@ func (cfg *Config) ReadSheets(ctx context.Context) (map[int]string, error) {
 	return map[int]string{1: cfg.fileName}, nil
 }
 
-const (
-	DateFormat     = "20060102"
-	DateTimeFormat = "20060102150405"
-)
-
 func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename string, sheetIndex int, columns []int, skip int) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -364,9 +359,21 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 	if err != nil {
 		return fmt.Errorf("open %q: %w", filename, err)
 	}
-	sheetName := xlFile.GetSheetName(sheetIndex - 1)
+	sheetName := xlFile.GetSheetName(sheetIndex)
 	if sheetName == "" {
-		return fmt.Errorf("%d (only: %v): %w", sheetIndex, xlFile.GetSheetMap(), ErrUnknownSheet)
+		m := xlFile.GetSheetMap()
+		if sheetName = m[sheetIndex]; sheetName == "" {
+			if sheetName = m[sheetIndex-1]; sheetName == "" {
+				if len(m) == 1 {
+					for _, sheetName = range m {
+						break
+					}
+				}
+			}
+		}
+		if sheetName == "" {
+			return fmt.Errorf("%d (only: %v): %w", sheetIndex, m, ErrUnknownSheet)
+		}
 	}
 	n := 0
 	var need map[int]bool
