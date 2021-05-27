@@ -10,7 +10,6 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/csv"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -398,12 +397,12 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 	dateFmts[14], dateFmts[15], dateFmts[16], dateFmts[17], dateFmts[22] = token, token, token, token, token
 	if xlFile.Styles.NumFmts != nil {
 		for _, nf := range xlFile.Styles.NumFmts.NumFmt {
+			//log.Printf("%d. ID=%d code=%q", i, nf.NumFmtID, nf.FormatCode)
 			if strings.Contains(nf.FormatCode, "yy") {
 				dateFmts[nf.NumFmtID] = token
 			}
 		}
 	}
-	var dateCols []int
 	i := 0
 	for rows.Next() {
 		i++
@@ -422,87 +421,59 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 			return ctx.Err()
 		default:
 		}
-		if i == skip+1 {
-			enc := json.NewEncoder(os.Stdout)
-			enc.SetIndent("", "  ")
-			enc.Encode(xlFile.Styles)
-			log.Println(dateFmts)
-			for j := range row {
-				axis, err := excelize.CoordinatesToCellName(j+1, i)
-				if err != nil {
-					return fmt.Errorf("%d:%d: %w", j, i, err)
+		for j := range row {
+			axis, err := excelize.CoordinatesToCellName(j+1, i)
+			if err != nil {
+				return fmt.Errorf("%d:%d: %w", j, i, err)
+			}
+			styleID, err := xlFile.GetCellStyle(sheetName, axis)
+			if err != nil {
+				return err
+			}
+			xf := xlFile.Styles.CellXfs.Xf[styleID]
+			// http://officeopenxml.com/SSstyles.php
+			// CellXfs, maybe it's XfID points to CellStyleXFs, and maybe that's ApplyNumberFormat is not 0.
+			// enc := json.NewEncoder(os.Stdout); enc.SetIndent("", "  "); enc.Encode(xlFile.Styles)
+			var numFmtID int
+			if xf.NumFmtID != nil {
+				numFmtID = *xf.NumFmtID
+			}
+			if xf.XfID != nil {
+				if sxf := xlFile.Styles.CellStyleXfs.Xf[*xf.XfID]; sxf.ApplyNumberFormat != nil &&
+					sxf.NumFmtID != nil && *sxf.ApplyNumberFormat {
+					numFmtID = *sxf.NumFmtID
 				}
-				styleID, err := xlFile.GetCellStyle(sheetName, axis)
+			}
+			if _, ok := dateFmts[numFmtID]; ok {
+				col, err := excelize.ColumnNumberToName(j + 1)
 				if err != nil {
 					return err
 				}
-				log.Printf("styleID=%d", styleID)
-				xfID := xlFile.Styles.CellStyles.CellStyle[styleID].XfID
-				log.Printf("xfID=%d", xfID)
-				if len(xlFile.Styles.CellXfs.Xf) <= xfID {
+				if err = xlFile.SetColStyle(sheetName, col, 0); err != nil {
+					return err
+				}
+				v, err := xlFile.GetCellValue(sheetName, axis)
+				if err != nil {
+					return err
+				}
+				if v == "" {
 					continue
 				}
-				sXfs := xlFile.Styles.CellXfs.Xf[xfID]
-				if sXfs.NumFmtID == nil {
+				f, err := strconv.ParseFloat(v, 32)
+				if err != nil && (v[0] == '-' || '0' <= v[0] && v[0] <= '9') {
+					log.Printf("%d:%d.ParseFloat(%q): %+v", i, j+1, v, err)
 					continue
 				}
-				log.Printf("%#v", *sXfs.NumFmtID)
-				if _, ok := dateFmts[*sXfs.NumFmtID]; ok {
-					col, err := excelize.ColumnNumberToName(j + 1)
-					if err != nil {
-						return err
-					}
-					if err = xlFile.SetColStyle(sheetName, col, 0); err != nil {
-						return err
-					}
-					if row[j], err = xlFile.GetCellValue(sheetName, axis); err != nil {
-						return err
-					}
-					dateCols = append(dateCols, j)
+
+				t, err := excelize.ExcelDateToTime(f, false)
+				if err != nil {
+					return fmt.Errorf("%d:%d.ExcelDateToTime(%f): %w", i, j+1, f, err)
 				}
+				row[j] = t.Format("2006-01-02")
 			}
-			log.Println("dateCols:", dateCols)
+			//log.Println("dateCols:", dateCols)
 		}
 
-		/*
-			for j := range row {
-				k := raw[j].S
-				if !(0 <= k && k < len(xfs)) {
-					continue
-				}
-				if raw[j].V == "" {
-					row[j] = ""
-					continue
-				}
-				if _, ok := dateFmts[*(xfs[k].NumFmtID)]; ok {
-					f, err := strconv.ParseFloat(raw[j].V, 32)
-					if err != nil {
-						return fmt.Errorf("%d:%d.ParseFloat(%q): %w", i, j+1, raw[j].V, err)
-					}
-					t, err := excelize.ExcelDateToTime(f, false)
-					if err != nil {
-						return fmt.Errorf("%d:%d.ExcelDateToTime(%f): %w", i, j+1, f, err)
-					}
-					row[j] = t.Format("2006-01-02")
-				}
-			}
-		*/
-		for _, j := range dateCols {
-			v := row[j]
-			if v == "" {
-				continue
-			}
-			f, err := strconv.ParseFloat(v, 32)
-			if err != nil {
-				return fmt.Errorf("%d:%d.ParseFloat(%q): %w", i, j+1, v, err)
-			}
-
-			t, err := excelize.ExcelDateToTime(f, false)
-			if err != nil {
-				return fmt.Errorf("%d:%d.ExcelDateToTime(%f): %w", i, j+1, f, err)
-			}
-			row[j] = t.Format("2006-01-02")
-		}
 		if err := fn(sheetName, Row{Line: n, Values: row}); err != nil {
 			return err
 		}
