@@ -18,6 +18,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"golang.org/x/text/encoding"
@@ -444,32 +445,37 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 					numFmtID = *sxf.NumFmtID
 				}
 			}
-			if _, ok := dateFmts[numFmtID]; ok {
-				col, err := excelize.ColumnNumberToName(j + 1)
-				if err != nil {
-					return err
-				}
-				if err = xlFile.SetColStyle(sheetName, col, 0); err != nil {
-					return err
-				}
-				v, err := xlFile.GetCellValue(sheetName, axis)
-				if err != nil {
-					return err
-				}
-				if v == "" {
-					continue
-				}
-				f, err := strconv.ParseFloat(v, 32)
-				if err != nil && (v[0] == '-' || '0' <= v[0] && v[0] <= '9') {
-					log.Printf("%d:%d.ParseFloat(%q): %+v", i, j+1, v, err)
-					continue
-				}
+			if _, ok := dateFmts[numFmtID]; !ok {
+				continue
+			}
+			col, err := excelize.ColumnNumberToName(j + 1)
+			if err != nil {
+				return err
+			}
+			if err = xlFile.SetColStyle(sheetName, col, 0); err != nil {
+				return err
+			}
+			v, err := xlFile.GetCellValue(sheetName, axis)
+			if err != nil {
+				return err
+			}
+			if v == "" {
+				continue
+			}
+			f, err := strconv.ParseFloat(v, 32)
+			if err != nil && (v[0] == '-' || '0' <= v[0] && v[0] <= '9') {
+				log.Printf("%d:%d.ParseFloat(%q): %+v", i, j+1, v, err)
+				continue
+			}
 
-				t, err := excelize.ExcelDateToTime(f, false)
-				if err != nil {
-					return fmt.Errorf("%d:%d.ExcelDateToTime(%f): %w", i, j+1, f, err)
-				}
+			t, err := excelize.ExcelDateToTime(f, false)
+			if err != nil {
+				return fmt.Errorf("%d:%d.ExcelDateToTime(%f): %w", i, j+1, f, err)
+			}
+			if t.Equal(time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())) {
 				row[j] = t.Format("2006-01-02")
+			} else {
+				row[j] = t.Format(time.RFC3339)
 			}
 			//log.Println("dateCols:", dateCols)
 		}
