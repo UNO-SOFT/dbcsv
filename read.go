@@ -448,17 +448,14 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 			if _, ok := dateFmts[numFmtID]; !ok {
 				continue
 			}
-			col, err := excelize.ColumnNumberToName(j + 1)
-			if err != nil {
-				return err
-			}
-			if err = xlFile.SetColStyle(sheetName, col, 0); err != nil {
+			if err = xlFile.SetCellStyle(sheetName, axis, axis, 0); err != nil {
 				return err
 			}
 			v, err := xlFile.GetCellValue(sheetName, axis)
 			if err != nil {
 				return err
 			}
+			_ = xlFile.SetCellStyle(sheetName, axis, axis, styleID)
 			if v == "" {
 				continue
 			}
