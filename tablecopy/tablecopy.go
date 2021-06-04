@@ -133,18 +133,18 @@ will execute a "SELECT * FROM Source_table@source_db WHERE F_ield=1" and an "INS
 		tables = append(tables, tbl)
 	}
 
-	mkInit := func(queries string) func(driver.Conn) error {
+	mkInit := func(queries string) func(context.Context, driver.ConnPrepareContext) error {
 		if queries == "" {
-			return func(driver.Conn) error { return nil }
+			return func(context.Context, driver.ConnPrepareContext) error { return nil }
 		}
 		qs := strings.Split(queries, ";\n")
-		return func(conn driver.Conn) error {
+		return func(ctx context.Context, conn driver.ConnPrepareContext) error {
 			for _, qry := range qs {
-				stmt, err := conn.Prepare(qry)
+				stmt, err := conn.PrepareContext(ctx, qry)
 				if err != nil {
 					return fmt.Errorf("%s: %w", qry, err)
 				}
-				_, err = stmt.Exec(nil) //nolint: SA1019 not easy
+				_, err = stmt.(driver.StmtExecContext).ExecContext(ctx, nil)
 				stmt.Close()
 				if err != nil {
 					return err
@@ -254,18 +254,19 @@ type copyTask struct {
 }
 
 func One(ctx context.Context, dstTx, srcTx *sql.Tx, task copyTask, batchSize int, Log func(...interface{}) error) (int64, error) {
+	Log("msg", "One", "task", task)
 	if task.Dst == "" {
 		task.Dst = task.Src
 	}
 	var n int64
 	srcCols, err := getColumns(ctx, srcTx, task.Src)
 	if err != nil {
-		return n, err
+		return n, fmt.Errorf("sources: %w", err)
 	}
 
 	dstCols, err := getColumns(ctx, dstTx, task.Dst)
 	if err != nil {
-		return n, err
+		return n, fmt.Errorf("dest: %w", err)
 	}
 	m := make(map[string]struct{}, len(dstCols))
 	for _, c := range dstCols {
@@ -342,13 +343,8 @@ func One(ctx context.Context, dstTx, srcTx *sql.Tx, task copyTask, batchSize int
 		rBatch[i] = reflect.MakeSlice(reflect.SliceOf(et), 0, batchSize)
 	}
 	doInsert := func() error {
-		if len(batchValues) == 0 {
-			for _, v := range rBatch {
-				batchValues = append(batchValues, v.Interface())
-			}
-		}
-		if Log != nil {
-			Log("msg", "INSERT", "len", m)
+		for i, v := range rBatch {
+			batchValues[i] = v.Interface()
 		}
 		if _, err = stmt.ExecContext(ctx, batchValues...); err != nil {
 			return fmt.Errorf("%s %v: %w", dstQry, batchValues, err)
