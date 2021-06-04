@@ -343,8 +343,9 @@ func One(ctx context.Context, dstTx, srcTx *sql.Tx, task copyTask, batchSize int
 		rBatch[i] = reflect.MakeSlice(reflect.SliceOf(et), 0, batchSize)
 	}
 	doInsert := func() error {
-		for i, v := range rBatch {
-			batchValues[i] = v.Interface()
+		batchValues = batchValues[:0]
+		for _, v := range rBatch {
+			batchValues = append(batchValues, v.Interface())
 		}
 		if _, err = stmt.ExecContext(ctx, batchValues...); err != nil {
 			return fmt.Errorf("%s %v: %w", dstQry, batchValues, err)
