@@ -526,7 +526,7 @@ func ReadXLSFile(ctx context.Context, fn func(string, Row) error, filename strin
 		}
 
 		for j := off; j < row.LastCol(); j++ {
-			if need != nil && !need[int(j)] {
+			if need != nil && !need[j] {
 				continue
 			}
 			vals[j-off] = row.Col(j)
@@ -536,7 +536,7 @@ func ReadXLSFile(ctx context.Context, fn func(string, Row) error, filename strin
 			return ctx.Err()
 		default:
 		}
-		if err := fn(sheet.Name, Row{Line: int(n), Values: vals}); err != nil {
+		if err := fn(sheet.Name, Row{Line: n, Values: vals}); err != nil {
 			return err
 		}
 	}
@@ -582,7 +582,7 @@ func ReadCSV(ctx context.Context, fn func(Row) error, r io.Reader, delim string,
 	for {
 		row, err := cr.Read()
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			return err
@@ -609,7 +609,7 @@ func ReadCSV(ctx context.Context, fn func(Row) error, r io.Reader, delim string,
 			return ctx.Err()
 		}
 		if err := fn(Row{Columns: colNames, Line: n - 1, Values: row}); err != nil {
-			if err != context.Canceled {
+			if !errors.Is(err, context.Canceled) {
 				log.Printf("Consume %d. row: %+v", n, err)
 			}
 			return err

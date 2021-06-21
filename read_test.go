@@ -65,7 +65,7 @@ func TestCompressedTempCSV(t *testing.T) {
 	go func() {
 		defer stdw.Close()
 		defer close(errCh)
-		stdw.Write([]byte("id;str\n"))
+		_, _ = stdw.Write([]byte("id;str\n"))
 		for i := 0; i < 1000; i++ {
 			if _, err := fmt.Fprintf(stdw, "%d;árvíztűrő tükörfúrógép\n", i); err != nil {
 				errCh <- err

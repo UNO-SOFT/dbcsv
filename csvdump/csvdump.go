@@ -127,7 +127,7 @@ and dump all the columns of the cursor returned by the function.
 		buf.WriteString("); END;")
 		qry := buf.String()
 		if Log != nil {
-			Log("call", qry, "params", params)
+			_ = Log("call", qry, "params", params)
 		}
 		queries = append(queries, qry)
 	} else {
@@ -156,7 +156,7 @@ and dump all the columns of the cursor returned by the function.
 
 	fh := os.Stdout
 	if !(*flagOut == "" || *flagOut == "-") {
-		os.MkdirAll(filepath.Dir(*flagOut), 0775)
+		_ = os.MkdirAll(filepath.Dir(*flagOut), 0775)
 		if fh, err = os.Create(*flagOut); err != nil {
 			return fmt.Errorf("%s: %w", *flagOut, err)
 		}
@@ -176,7 +176,7 @@ and dump all the columns of the cursor returned by the function.
 	}
 
 	if Log != nil {
-		Log("msg", "writing", "file", fh.Name(), "encoding", enc)
+		_ = Log("msg", "writing", "file", fh.Name(), "encoding", enc)
 	}
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
@@ -188,9 +188,9 @@ and dump all the columns of the cursor returned by the function.
 	defer tx.Rollback()
 
 	if len(flagSheets.Strings) == 0 {
-		w := io.Writer(encoding.ReplaceUnsupported(enc.NewEncoder()).Writer(wfh))
+		w := encoding.ReplaceUnsupported(enc.NewEncoder()).Writer(wfh)
 		if Log != nil {
-			Log("env_encoding", dbcsv.DefaultEncoding.Name)
+			_ = Log("env_encoding", dbcsv.DefaultEncoding.Name)
 		}
 
 		rows, columns, qErr := doQuery(ctx, tx, queries[0], params, *flagCall, *flagSort)
@@ -244,7 +244,7 @@ and dump all the columns of the cursor returned by the function.
 				break
 			}
 			grp.Go(func() error {
-				Log(name, qry)
+				_ = Log(name, qry)
 				err := dbcsv.DumpSheet(ctx, sheet, rows, columns, Log)
 				rows.Close()
 				if closeErr := sheet.Close(); closeErr != nil && err == nil {

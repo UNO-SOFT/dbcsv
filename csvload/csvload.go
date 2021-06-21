@@ -167,7 +167,7 @@ func Main() error {
 		defer f.Close()
 		cfg.WriteHeapProf = func() {
 			log.Println("writeHeapProf")
-			f.Seek(0, 0)
+			_, _ = f.Seek(0, 0)
 			runtime.GC() // get up-to-date statistics
 			if err := pprof.WriteHeapProfile(f); err != nil {
 				log.Fatal("could not write memory profile: ", err)
@@ -366,7 +366,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	}
 	log.Println(qry)
 	defCancel()
-	if err := grp.Wait(); err != nil && err != context.Canceled {
+	if err := grp.Wait(); err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
 
@@ -376,7 +376,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		chunkSize = defaultChunkSize
 	}
 	for _, c := range columns {
-		if hasLOB = c.DataType == "CLOB" || c.DataType == "BLOB"; hasLOB {
+		if hasLOB = c.DataType == tCLOB || c.DataType == tBLOB; hasLOB {
 			chunkSize = 1
 			break
 		}
@@ -737,16 +737,22 @@ const (
 	Int     = Type(2)
 	Float   = Type(3)
 	Date    = Type(4)
+
+	tBLOB     = "BLOB"
+	tCLOB     = "CLOB"
+	tDATE     = "DATE"
+	tVARCHAR2 = "VARCHAR2"
+	tNUMBER   = "NUMBER"
 )
 
 func (t Type) String() string {
 	switch t {
 	case Int, Float:
-		return "NUMBER"
+		return tNUMBER
 	case Date:
-		return "DATE"
+		return tDATE
 	default:
-		return "VARCHAR2"
+		return tVARCHAR2
 	}
 }
 
@@ -812,8 +818,8 @@ func (c Column) FromString(ss []string) (interface{}, error) {
 		return ss, nil
 	}
 
-	if c.DataType == "CLOB" || c.DataType == "BLOB" {
-		isClob := c.DataType == "CLOB"
+	if c.DataType == tCLOB || c.DataType == tBLOB {
+		isClob := c.DataType == tCLOB
 		res := make([]godror.Lob, len(ss))
 		for i, s := range ss {
 			res[i] = godror.Lob{IsClob: isClob, Reader: strings.NewReader(s)}

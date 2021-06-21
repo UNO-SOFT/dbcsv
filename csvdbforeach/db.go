@@ -96,7 +96,7 @@ func dbExec(db *sql.DB, fun string, fixParams [][2]string, retOk int64, rows <-c
 				tx = nil
 				buf.Reset()
 				cw := csv.NewWriter(&buf)
-				cw.Write(append([]string{fmt.Sprintf("%d", ret), out}, row.Values...))
+				_ = cw.Write(append([]string{fmt.Sprintf("%d", ret), out}, row.Values...))
 				cw.Flush()
 				stdout.Write(buf.Bytes())
 				if oneTx {

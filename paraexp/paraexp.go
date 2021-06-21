@@ -118,7 +118,7 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 
 	fh := os.Stdout
 	if !(*flagOut == "" || *flagOut == "-") {
-		os.MkdirAll(filepath.Dir(*flagOut), 0775)
+		_ = os.MkdirAll(filepath.Dir(*flagOut), 0775)
 		if fh, err = os.Create(*flagOut); err != nil {
 			return fmt.Errorf("%s: %w", *flagOut, err)
 		}
@@ -128,10 +128,12 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 	defer bw.Flush()
 
 	if Log != nil {
-		Log("msg", "writing", "file", fh.Name())
+		_ = Log("msg", "writing", "file", fh.Name())
 	}
 
-	bw.WriteString("[\n")
+	if _, err := bw.WriteString("[\n"); err != nil {
+		return err
+	}
 	first := true
 	concLimit := make(chan struct{}, *flagConcurrency)
 	enc := json.NewEncoder(bw)
@@ -166,7 +168,9 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 			if first {
 				first = false
 			} else {
-				bw.WriteByte(',')
+				if err = bw.WriteByte(','); err != nil {
+					return err
+				}
 			}
 			if encErr := enc.Encode(Table{Name: name, Error: errS, Rows: rows}); encErr != nil && err == nil {
 				err = encErr
@@ -178,8 +182,10 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 	if err = grp.Wait(); err != nil {
 		return err
 	}
-	bw.WriteString("]\n")
-	bw.Flush()
+	_, _ = bw.WriteString("]\n")
+	if err = bw.Flush(); err != nil {
+		return err
+	}
 	return fh.Close()
 }
 

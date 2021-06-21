@@ -1,0 +1,29 @@
+linters-settings:
+  maligned:
+    suggest-new: true
+  errcheck:
+    ignore: github.com/go-kit/kit/log:.*,database/sql:Rollback
+
+linters:
+  enable:
+    - dupl
+    - goconst
+    - misspell
+    - prealloc
+    - unused
+    - staticcheck
+    - gofmt
+    - errorlint
+    - noctx
+    - unconvert
+
+  disable:
+    - interfacer
+    - sqlclosecheck
+    - unparam
+
+issues:
+  exclude:
+    - "`?encodeFixed(32|64)Pb`? is unused"
+    - "`Specialis` is a misspelling of `Specials`"
+

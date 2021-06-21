@@ -195,7 +195,7 @@ Usage:
 	n, err = dbExec(db, *flagFunc, fixParams, int64(*flagFuncRetOk), rows, *flagOneTx)
 	bw.Flush()
 	if err != nil {
-		return fmt.Errorf("exec %q: %v", *flagFunc, err)
+		return fmt.Errorf("exec %q: %w", *flagFunc, err)
 	}
 	d := time.Since(start)
 	close(errch)

@@ -35,11 +35,15 @@ func DumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column,
 	if header && !raw {
 		for i, col := range columns {
 			if i > 0 {
-				bw.Write(sepB)
+				_, _ = bw.Write(sepB)
 			}
-			csvQuote(bw, sep, col.Name)
+			if _, err := csvQuote(bw, sep, col.Name); err != nil {
+				return err
+			}
 		}
-		bw.Write([]byte{'\n'})
+		if _, err := bw.Write([]byte{'\n'}); err != nil {
+			return err
+		}
 	}
 
 	start := time.Now()
@@ -54,29 +58,31 @@ func DumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column,
 					continue
 				}
 				if sr, ok := values[i].(interface{ StringRaw() string }); ok {
-					bw.WriteString(sr.StringRaw())
+					_, _ = bw.WriteString(sr.StringRaw())
 				} else {
-					bw.WriteString(values[i].String())
+					_, _ = bw.WriteString(values[i].String())
 				}
 			}
 		} else {
 			for i, data := range dest {
 				if i > 0 {
-					bw.Write(sepB)
+					_, _ = bw.Write(sepB)
 				}
 				if data == nil {
 					continue
 				}
-				bw.WriteString(values[i].String())
+				_, _ = bw.WriteString(values[i].String())
 			}
 		}
-		bw.Write([]byte{'\n'})
+		if _, err := bw.Write([]byte{'\n'}); err != nil {
+			return err
+		}
 		n++
 	}
 	err := rows.Err()
 	dur := time.Since(start)
 	if Log != nil {
-		Log("msg", "dump finished", "rows", n, "dur", dur, "speed", float64(n)/float64(dur)*float64(time.Second), "error", err)
+		_ = Log("msg", "dump finished", "rows", n, "dur", dur, "speed", float64(n)/float64(dur)*float64(time.Second), "error", err)
 	}
 	return err
 }
@@ -105,7 +111,7 @@ func DumpSheet(ctx context.Context, sheet spreadsheet.Sheet, rows *sql.Rows, col
 	err := rows.Err()
 	dur := time.Since(start)
 	if Log != nil {
-		Log("msg", "dump finished", "rows", n, "dur", dur, "speed", float64(n)/float64(dur)*float64(time.Second), "error", err)
+		_ = Log("msg", "dump finished", "rows", n, "dur", dur, "speed", float64(n)/float64(dur)*float64(time.Second), "error", err)
 	}
 	return err
 }
@@ -249,7 +255,9 @@ func csvQuoteString(sep, s string) string {
 	buf := bufPool.Get().(*bytes.Buffer)
 	defer bufPool.Put(buf)
 	buf.Reset()
-	csvQuote(buf, sep, s)
+	if _, err := csvQuote(buf, sep, s); err != nil {
+		panic(fmt.Errorf("csvQuote %q: %w", s, err))
+	}
 	return buf.String()
 }
 

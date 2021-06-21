@@ -207,10 +207,14 @@ will execute a "SELECT * FROM Source_table@source_db WHERE F_ield=1" and an "INS
 			task.Dst = task.Src
 		}
 		if !strings.EqualFold(task.Dst, task.Src) || dstP.String() != srcP.String() {
-			dstDB.ExecContext(subCtx, fmt.Sprintf("CREATE TABLE %s AS SELECT * FROM %s WHERE 1=0", task.Dst, task.Src))
+			if _, err = dstDB.ExecContext(subCtx, fmt.Sprintf("CREATE TABLE %s AS SELECT * FROM %s WHERE 1=0", task.Dst, task.Src)); err != nil {
+				if !strings.Contains(err.Error(), "ORA-00955:") {
+					return err
+				}
+			}
 			if task.Truncate {
 				if Log != nil {
-					Log("msg", "TRUNCATE", "table", task.Dst)
+					_ = Log("msg", "TRUNCATE", "table", task.Dst)
 				}
 				if _, err := dstDB.ExecContext(subCtx, "TRUNCATE TABLE "+task.Dst); err != nil {
 					if _, err = dstDB.ExecContext(subCtx, "DELETE FROM "+task.Dst); err != nil {
@@ -254,7 +258,7 @@ type copyTask struct {
 }
 
 func One(ctx context.Context, dstTx, srcTx *sql.Tx, task copyTask, batchSize int, Log func(...interface{}) error) (int64, error) {
-	Log("msg", "One", "task", task)
+	_ = Log("msg", "One", "task", task)
 	if task.Dst == "" {
 		task.Dst = task.Src
 	}
@@ -316,8 +320,8 @@ func One(ctx context.Context, dstTx, srcTx *sql.Tx, task copyTask, batchSize int
 	}
 	defer stmt.Close()
 	if Log != nil {
-		Log("src", srcQry)
-		Log("dst", dstQry)
+		_ = Log("src", srcQry)
+		_ = Log("dst", dstQry)
 	}
 
 	if batchSize < 1 {
