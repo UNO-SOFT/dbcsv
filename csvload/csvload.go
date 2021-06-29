@@ -769,7 +769,11 @@ func (c Column) FromString(ss []string) (interface{}, error) {
 					continue
 				}
 			}
-			t, err := time.ParseInLocation(dateFormat[:len(s)], s, time.Local)
+			df := dateFormat
+			if len(s) < len(df) {
+				df = df[:len(s)]
+			}
+			t, err := time.ParseInLocation(df, s, time.Local)
 			if err != nil {
 				return res, fmt.Errorf("%d. %q: %w", i, s, err)
 			}
