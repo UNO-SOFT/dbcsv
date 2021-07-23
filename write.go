@@ -82,7 +82,7 @@ func DumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column,
 	err := rows.Err()
 	dur := time.Since(start)
 	if Log != nil {
-		_ = Log("msg", "dump finished", "rows", n, "dur", dur, "speed", float64(n)/float64(dur)*float64(time.Second), "error", err)
+		_ = Log("msg", "dump finished", "rows", n, "dur", dur.String(), "speed", fmt.Sprintf("%.3f 1/s", float64(n)/float64(dur*time.Second)), "error", err)
 	}
 	return err
 }
