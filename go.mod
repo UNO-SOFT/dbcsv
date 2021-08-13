@@ -9,7 +9,7 @@ require (
 	github.com/extrame/ole2 v0.0.0-20160812065207-d69429661ad7 // indirect
 	github.com/extrame/xls v0.0.2-0.20180905092746-539786826ced
 	github.com/godror/godror v0.25.3
-	github.com/klauspost/compress v1.13.1
+	github.com/klauspost/compress v1.13.4
 	github.com/peterbourgon/ff/v3 v3.0.0
 	golang.org/x/crypto v0.0.0-20210616213533-5ff15b29337e // indirect
 	golang.org/x/net v0.0.0-20210614182718-04defd469f4e // indirect
