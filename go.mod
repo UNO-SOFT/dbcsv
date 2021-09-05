@@ -26,7 +26,7 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/quicktemplate v1.6.3 // indirect
 	github.com/xuri/efp v0.0.0-20210322160811-ab561f5b45e3 // indirect
-	github.com/xuri/excelize/v2 v2.4.1 // indirect
+	github.com/xuri/excelize/v2 v2.4.2-0.20210905035950-32b23ef42d3e // indirect
 )
 
 //replace github.com/godror/godror => ../../godror/godror

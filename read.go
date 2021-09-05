@@ -26,9 +26,9 @@ import (
 	"golang.org/x/text/encoding/htmlindex"
 	"golang.org/x/text/transform"
 
-	"github.com/xuri/excelize/v2"
 	"github.com/extrame/xls"
 	"github.com/klauspost/compress/zstd"
+	"github.com/xuri/excelize/v2"
 )
 
 var DefaultEncoding = NamedEncoding{Encoding: encoding.Replacement, Name: "utf-8"}
@@ -422,6 +422,8 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 			return ctx.Err()
 		default:
 		}
+
+		// Override dates
 		for j := range row {
 			axis, err := excelize.CoordinatesToCellName(j+1, i)
 			if err != nil {
@@ -448,14 +450,10 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 			if _, ok := dateFmts[numFmtID]; !ok {
 				continue
 			}
-			if err = xlFile.SetCellStyle(sheetName, axis, axis, 0); err != nil {
-				return err
-			}
-			v, err := xlFile.GetCellValue(sheetName, axis)
+			v, err := xlFile.GetCellValue(sheetName, axis, excelize.Options{RawCellValue: true})
 			if err != nil {
 				return err
 			}
-			_ = xlFile.SetCellStyle(sheetName, axis, axis, styleID)
 			if v == "" {
 				continue
 			}
