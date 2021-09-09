@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/text/encoding"
@@ -52,6 +53,7 @@ func Main() error {
 	flagVerbose := flag.Bool("v", false, "verbose logging")
 	flagCompress := flag.String("compress", "", "compress output with gz/gzip or zst/zstd/zstandard")
 	flagCall := flag.Bool("call", false, "the first argument is not the WHERE, but the PL/SQL block to be called, the followings are not the columns but the arguments")
+	flagTimeout := flag.Duration("timeout", 15*time.Minute, "timeout")
 
 	flag.Usage = func() {
 		fmt.Fprintln(flag.CommandLine.Output(), strings.Replace(`Usage of {{.prog}}:
@@ -149,9 +151,11 @@ and dump all the columns of the cursor returned by the function.
 		return fmt.Errorf("%s: %w", *flagConnect, err)
 	}
 	defer db.Close()
-	db.SetMaxOpenConns(1)
+	db.SetMaxOpenConns(2)
 	db.SetMaxIdleConns(1)
-	ctx, cancel := dbcsv.Wrap(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), *flagTimeout)
+	defer cancel()
+	ctx, cancel = dbcsv.Wrap(ctx)
 	defer cancel()
 
 	fh := os.Stdout
@@ -212,7 +216,7 @@ and dump all the columns of the cursor returned by the function.
 		}
 		defer w.Close()
 		dec := enc.Encoding.NewDecoder()
-		var grp errgroup.Group
+		grp, grpCtx := errgroup.WithContext(ctx)
 		for sheetNo := range queries {
 			qry := queries[sheetNo]
 			if qry, err = dec.String(qry); err != nil {
@@ -226,7 +230,7 @@ and dump all the columns of the cursor returned by the function.
 			if name == "" {
 				name = strconv.Itoa(sheetNo + 1)
 			}
-			rows, columns, qErr := doQuery(ctx, tx, qry, nil, false, *flagSort)
+			rows, columns, qErr := doQuery(grpCtx, tx, qry, nil, false, *flagSort)
 			if qErr != nil {
 				err = qErr
 				break
@@ -245,7 +249,7 @@ and dump all the columns of the cursor returned by the function.
 			}
 			grp.Go(func() error {
 				_ = Log(name, qry)
-				err := dbcsv.DumpSheet(ctx, sheet, rows, columns, Log)
+				err := dbcsv.DumpSheet(grpCtx, sheet, rows, columns, Log)
 				rows.Close()
 				if closeErr := sheet.Close(); closeErr != nil && err == nil {
 					return closeErr
@@ -345,14 +349,14 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 				qry = bld.String()
 			}
 		}
-		if rows, err = db.QueryContext(ctx, qry, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize)); err != nil {
+		if rows, err = db.QueryContext(ctx, qry, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize+1)); err != nil {
 			qry = origQry
-			rows, err = db.QueryContext(ctx, qry, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize))
+			rows, err = db.QueryContext(ctx, qry, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize+1))
 		}
 	} else {
 		var dRows driver.Rows
 		params = append(append(make([]interface{}, 0, 2+len(params)),
-			sql.Out{Dest: &dRows}, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize)),
+			sql.Out{Dest: &dRows}, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize+1)),
 			params...)
 		if _, err = db.ExecContext(ctx, qry, params...); err == nil {
 			rows, err = godror.WrapRows(ctx, db, dRows)

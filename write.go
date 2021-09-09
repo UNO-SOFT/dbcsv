@@ -49,6 +49,9 @@ func DumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column,
 	start := time.Now()
 	n := 0
 	for rows.Next() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := rows.Scan(dest...); err != nil {
 			return fmt.Errorf("scan into %#v: %w", dest, err)
 		}
@@ -100,6 +103,9 @@ func DumpSheet(ctx context.Context, sheet spreadsheet.Sheet, rows *sql.Rows, col
 	start := time.Now()
 	n := 0
 	for rows.Next() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := rows.Scan(dest...); err != nil {
 			return fmt.Errorf("scan into %#v: %w", dest, err)
 		}
