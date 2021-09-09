@@ -31,11 +31,15 @@ func Wrap(ctx context.Context) (context.Context, context.CancelFunc) {
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithCancel(ctx)
 	go func() {
-		<-sigCh
+		sig := <-sigCh
 		signal.Stop(sigCh)
 		cancel()
 		go func() {
-			time.Sleep(5 * time.Second)
+			time.Sleep(3 * time.Second)
+			if p, _ := os.FindProcess(os.Getpid()); p != nil {
+				p.Signal(sig)
+			}
+			time.Sleep(2 * time.Second)
 			os.Exit(1)
 		}()
 	}()
