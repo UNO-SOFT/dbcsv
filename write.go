@@ -147,6 +147,30 @@ func (v ValString) StringRaw() string         { return v.Value.String }
 func (v *ValString) Pointer() interface{}     { return &v.Value }
 func (v *ValString) Scan(x interface{}) error { return v.Value.Scan(x) }
 
+type ValBytes struct {
+	Sep   string
+	Value []byte
+}
+
+func (v ValBytes) String() string        { return csvQuoteString(v.Sep, fmt.Sprintf("%x", v.Value)) }
+func (v ValBytes) StringRaw() string     { return fmt.Sprintf("%x", v.Value) }
+func (v *ValBytes) Pointer() interface{} { return &v.Value }
+func (v *ValBytes) Scan(x interface{}) error {
+	if x == nil {
+		v.Value = nil
+		return nil
+	}
+	switch x := x.(type) {
+	case []byte:
+		v.Value = x
+	case string:
+		v.Value = []byte(x)
+	default:
+		return fmt.Errorf("unknown scan source %T", x)
+	}
+	return nil
+}
+
 type ValInt struct {
 	Value sql.NullInt64
 }
@@ -234,7 +258,7 @@ func (vt *ValTime) Scan(v interface{}) error {
 }
 func (v *ValTime) Pointer() interface{} { return v }
 
-var typeOfTime, typeOfNullTime = reflect.TypeOf(time.Time{}), reflect.TypeOf(sql.NullTime{})
+var typeOfTime, typeOfNullTime, typeOfByteSlice = reflect.TypeOf(time.Time{}), reflect.TypeOf(sql.NullTime{}), reflect.TypeOf(([]byte)(nil))
 
 func getColConverter(typ reflect.Type, sep string) Stringer {
 	switch typ.Kind() {
@@ -246,6 +270,8 @@ func getColConverter(typ reflect.Type, sep string) Stringer {
 		return &ValInt{}
 	}
 	switch typ {
+	case typeOfByteSlice:
+		return &ValBytes{Sep: sep}
 	case typeOfTime, typeOfNullTime:
 		return &ValTime{Quote: sep != "" && strings.Contains(DateFormat, sep)}
 	}

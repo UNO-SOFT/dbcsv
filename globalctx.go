@@ -37,7 +37,7 @@ func Wrap(ctx context.Context) (context.Context, context.CancelFunc) {
 		go func() {
 			time.Sleep(3 * time.Second)
 			if p, _ := os.FindProcess(os.Getpid()); p != nil {
-				p.Signal(sig)
+				_ = p.Signal(sig)
 			}
 			time.Sleep(2 * time.Second)
 			os.Exit(1)
