@@ -7,7 +7,7 @@ require (
 	github.com/extrame/goyymmdd v0.0.0-20210114090516-7cc815f00d1a // indirect
 	github.com/extrame/ole2 v0.0.0-20160812065207-d69429661ad7 // indirect
 	github.com/extrame/xls v0.0.2-0.20180905092746-539786826ced
-	github.com/godror/godror v0.25.4
+	github.com/godror/godror v0.25.6
 	github.com/klauspost/compress v1.13.4
 	github.com/peterbourgon/ff/v3 v3.0.0
 	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97 // indirect
