@@ -42,7 +42,7 @@ func main() {
 func Main() error {
 	flagConnect := flag.String("connect", os.Getenv("DB_ID"), "user/passw@sid to connect to")
 	flagDateFormat := flag.String("date", dbcsv.DateFormat, "date format, in Go notation")
-	flagSep := flag.String("sep", ";", "separator")
+	flagSep := flag.String("sep", ",", "separator")
 	flagHeader := flag.Bool("header", true, "print header")
 	flagEnc := flag.String("encoding", dbcsv.DefaultEncoding.Name, "encoding to use for output")
 	flagOut := flag.String("o", "-", "output (defaults to stdout)")
