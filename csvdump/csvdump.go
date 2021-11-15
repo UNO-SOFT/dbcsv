@@ -317,8 +317,17 @@ type queryExecer interface {
 func doQuery(ctx context.Context, db queryExecer, qry string, params []interface{}, isCall, doSort bool) (*sql.Rows, []dbcsv.Column, error) {
 	var rows *sql.Rows
 	var err error
-	const batchSize = 1024
-	if !isCall {
+	const defaultBatchSize = 1024
+	batchSize := defaultBatchSize
+	if isCall {
+		var dRows driver.Rows
+		params = append(append(make([]interface{}, 0, 2+len(params)),
+			sql.Out{Dest: &dRows}, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize+1)),
+			params...)
+		if _, err = db.ExecContext(ctx, qry, params...); err == nil {
+			rows, err = godror.WrapRows(ctx, db, dRows)
+		}
+	} else {
 		origQry := qry
 		if doSort && strings.HasPrefix(qry, "SELECT * FROM") {
 			rows, err := db.QueryContext(ctx, qry+" FETCH FIRST ROW ONLY")
@@ -349,17 +358,21 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 				qry = bld.String()
 			}
 		}
+		{
+			qry := strings.ToUpper(qry)
+			if i := strings.Index(qry, " FETCH FIRST "); i >= 0 {
+				qry = strings.TrimSpace(qry[i+len(" FETCH FIRST "):])
+				if i := strings.Index(qry, " ROW"); i >= 0 {
+					if n, err := strconv.ParseUint(qry[:i], 10, 32); err == nil && n != 0 {
+						batchSize = int(n)
+					}
+				}
+			}
+		}
+		log.Println("QRY:", qry, "batchSize:", batchSize)
 		if rows, err = db.QueryContext(ctx, qry, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize+1)); err != nil {
 			qry = origQry
 			rows, err = db.QueryContext(ctx, qry, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize+1))
-		}
-	} else {
-		var dRows driver.Rows
-		params = append(append(make([]interface{}, 0, 2+len(params)),
-			sql.Out{Dest: &dRows}, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize+1)),
-			params...)
-		if _, err = db.ExecContext(ctx, qry, params...); err == nil {
-			rows, err = godror.WrapRows(ctx, db, dRows)
 		}
 	}
 	if err != nil {
