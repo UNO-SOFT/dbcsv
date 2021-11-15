@@ -359,17 +359,37 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 			}
 		}
 		{
-			qry := strings.ToUpper(qry)
+			var lastIsSpace bool
+			qry := strings.Map(func(r rune) rune {
+				if r == ' ' || r == '\n' || r == '\r' || r == '\t' || r == '\v' {
+					if lastIsSpace {
+						return -1
+					}
+					lastIsSpace = true
+					return ' '
+				}
+				lastIsSpace = false
+				if 'a' <= r && r <= 'z' {
+					return r - 'a' + 'A'
+				}
+				return r
+			},
+				qry)
+			//log.Println(qry)
 			if i := strings.Index(qry, " FETCH FIRST "); i >= 0 {
 				qry = strings.TrimSpace(qry[i+len(" FETCH FIRST "):])
-				if i := strings.Index(qry, " ROW"); i >= 0 {
+				i = strings.Index(qry, " ROWS ONLY")
+				if i < 0 {
+					i = strings.Index(qry, " ROW ONLY")
+				}
+				if i >= 0 {
 					if n, err := strconv.ParseUint(qry[:i], 10, 32); err == nil && n != 0 {
 						batchSize = int(n)
 					}
 				}
 			}
 		}
-		log.Println("QRY:", qry, "batchSize:", batchSize)
+		//log.Println("QRY:", qry, "batchSize:", batchSize)
 		if rows, err = db.QueryContext(ctx, qry, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize+1)); err != nil {
 			qry = origQry
 			rows, err = db.QueryContext(ctx, qry, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize+1))
