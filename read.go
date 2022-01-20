@@ -19,7 +19,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
@@ -554,14 +553,14 @@ func ReadCSV(ctx context.Context, fn func(Row) error, r io.Reader, delim string,
 		seen := make(map[rune]struct{})
 		nonAlnum := make([]rune, 0, 4)
 		for _, r := range string(b) {
-			if r == '"' || unicode.IsDigit(r) || unicode.IsLetter(r) {
-				continue
+			switch r {
+			case ',', ';', '\t':
+				if _, ok := seen[r]; !ok {
+					seen[r] = struct{}{}
+					nonAlnum = append(nonAlnum, r)
+				}
+			default:
 			}
-			if _, ok := seen[r]; ok {
-				continue
-			}
-			seen[r] = struct{}{}
-			nonAlnum = append(nonAlnum, r)
 		}
 		for len(nonAlnum) > 1 && nonAlnum[0] == ' ' {
 			nonAlnum = nonAlnum[1:]

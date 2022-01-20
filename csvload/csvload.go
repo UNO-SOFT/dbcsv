@@ -1,4 +1,4 @@
-// Copyright 2021 Tamás Gulácsi.
+// Copyright 2021, 2022 Tamás Gulácsi.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -125,7 +125,7 @@ func Main() error {
 
 	fs = flag.NewFlagSet("csvload", flag.ContinueOnError)
 	fs.StringVar(&cfg.Charset, "charset", encName, "input charset")
-	fs.StringVar(&cfg.Delim, "delim", ";", "CSV separator")
+	fs.StringVar(&cfg.Delim, "delim", "", "CSV separator")
 	fs.IntVar(&cfg.Concurrency, "concurrency", 4, "concurrency")
 	fs.StringVar(&dateFormat, "date", dateFormat, "date format, in Go notation")
 	fs.IntVar(&cfg.Skip, "skip", 0, "skip rows")
@@ -221,6 +221,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	select {
 	case err := <-firstRowErr:
 		if err != nil {
+			log.Println("First row: %+v", err)
 			return err
 		}
 	case <-grpCtx.Done():
@@ -229,7 +230,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	if len(fields) == 0 {
 		fields = firstRow.Columns
 	}
-	log.Println("fields: ", fields)
+	log.Printf("fields: %q", fields)
 
 	if cfg.JustPrint {
 		fmt.Println("INSERT ALL")
@@ -343,6 +344,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		}()
 		columns, err = CreateTable(defCtx, db, tbl, ctRows, cfg.Truncate, cfg.Tablespace, cfg.Copy, cfg.ForceString)
 		if err != nil {
+			log.Printf("Create table %q: %w", tbl, err)
 			return err
 		}
 		columns = filterCols(columns, fields)
@@ -646,7 +648,6 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
 		}
 	} else if n == 0 && copyTable == "" {
 		row := <-rows
-		log.Printf("row: %v", row.Columns)
 		cols = make([]Column, len(row.Columns))
 		for i, v := range row.Columns {
 			cols[i].Name = mkColName(v)
