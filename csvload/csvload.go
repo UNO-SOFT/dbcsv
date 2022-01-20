@@ -221,7 +221,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	select {
 	case err := <-firstRowErr:
 		if err != nil {
-			log.Println("First row: %+v", err)
+			log.Printf("First row: %+v", err)
 			return err
 		}
 	case <-grpCtx.Done():
@@ -344,7 +344,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		}()
 		columns, err = CreateTable(defCtx, db, tbl, ctRows, cfg.Truncate, cfg.Tablespace, cfg.Copy, cfg.ForceString)
 		if err != nil {
-			log.Printf("Create table %q: %w", tbl, err)
+			log.Printf("Create table %q: %+v", tbl, err)
 			return err
 		}
 		columns = filterCols(columns, fields)

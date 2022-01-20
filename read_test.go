@@ -1,4 +1,4 @@
-// Copyright 2020, Tamás Gulácsi.
+// Copyright 2020, 2022 Tamás Gulácsi.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -9,10 +9,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/UNO-SOFT/dbcsv"
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestRead(t *testing.T) {
@@ -93,5 +95,35 @@ func TestCompressedTempCSV(t *testing.T) {
 	}
 	if err := <-errCh; err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestReadDetectDelim(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	for _, tC := range []struct {
+		Text string
+		Want []dbcsv.Row
+	}{
+		{"HEADER_NO_DELIM\n123\n", []dbcsv.Row{
+			{Columns: []string{"HEADER_NO_DELIM"}, Values: []string{"HEADER_NO_DELIM"}, Line: 0},
+			{Columns: []string{"HEADER_NO_DELIM"}, Values: []string{"123"}, Line: 1},
+		}},
+		{`"COL1,";COL2` + "\na;b\n", []dbcsv.Row{
+			{Columns: []string{"COL1,", "COL2"}, Values: []string{"COL1,", "COL2"}, Line: 0},
+			{Columns: []string{"COL1,", "COL2"}, Values: []string{"a", "b"}, Line: 1},
+		}},
+	} {
+		var i int
+		if err := dbcsv.ReadCSV(ctx, func(r dbcsv.Row) error {
+			if d := cmp.Diff(tC.Want[i], r); d != "" {
+				t.Errorf("%d: %s", i, d)
+			}
+			i++
+			return nil
+		},
+			strings.NewReader(tC.Text), "", nil, 0); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

@@ -18,6 +18,11 @@ require (
 )
 
 require (
+	github.com/google/go-cmp v0.5.6
+	github.com/xuri/excelize/v2 v2.5.0
+)
+
+require (
 	github.com/go-logfmt/logfmt v0.5.0 // indirect
 	github.com/godror/knownpb v0.1.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
@@ -27,7 +32,6 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/quicktemplate v1.6.3 // indirect
 	github.com/xuri/efp v0.0.0-20210322160811-ab561f5b45e3 // indirect
-	github.com/xuri/excelize/v2 v2.5.0 // indirect
 	google.golang.org/protobuf v1.27.1 // indirect
 )
 

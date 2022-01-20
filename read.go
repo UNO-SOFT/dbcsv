@@ -1,4 +1,4 @@
-// Copyright 2020, 2021 Tamás Gulácsi.
+// Copyright 2020, 2022 Tamás Gulácsi.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -550,23 +550,16 @@ func ReadCSV(ctx context.Context, fn func(Row) error, r io.Reader, delim string,
 		if err != nil && len(b) == 0 {
 			return err
 		}
-		seen := make(map[rune]struct{})
-		nonAlnum := make([]rune, 0, 4)
-		for _, r := range string(b) {
-			switch r {
-			case ',', ';', '\t':
-				if _, ok := seen[r]; !ok {
-					seen[r] = struct{}{}
-					nonAlnum = append(nonAlnum, r)
-				}
-			default:
+		var maxCnt int
+		for _, r := range []rune{',', ';', '\t', ' '} {
+			cr := csv.NewReader(bytes.NewReader(b))
+			cr.Comma = r
+			v, _ := cr.Read()
+			if n := len(v); n > maxCnt {
+				maxCnt = n
+				delim = string([]rune{r})
 			}
 		}
-		for len(nonAlnum) > 1 && nonAlnum[0] == ' ' {
-			nonAlnum = nonAlnum[1:]
-		}
-		delim = string(nonAlnum[:1])
-		log.Printf("Non-alphanum characters are %q, so delim is %q.", nonAlnum, delim)
 	}
 	cr := csv.NewReader(br)
 
