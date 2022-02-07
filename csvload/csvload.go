@@ -202,14 +202,14 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	grp.Go(func() error {
 		defer close(rows)
 		err := cfg.ReadRows(grpCtx,
-			func(_ string, row dbcsv.Row) error {
+			func(ctx context.Context, _ string, row dbcsv.Row) error {
 				if firstRow.Columns == nil {
 					firstRow = row
 					firstRowErr <- nil
 				}
 				select {
-				case <-grpCtx.Done():
-					return grpCtx.Err()
+				case <-ctx.Done():
+					return ctx.Err()
 				case rows <- row:
 				}
 				return nil
@@ -230,7 +230,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	if len(fields) == 0 {
 		fields = firstRow.Columns
 	}
-	log.Printf("fields: %q", fields)
+	//log.Printf("fields: %q", fields)
 
 	if cfg.JustPrint {
 		fmt.Println("INSERT ALL")
@@ -366,11 +366,11 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		buf.WriteString(")")
 		qry = buf.String()
 	}
-	log.Println(qry)
 	defCancel()
 	if err := grp.Wait(); err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
+	log.Println(qry)
 
 	var hasLOB bool
 	chunkSize := cfg.ChunkSize
@@ -400,7 +400,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		grp.Go(func() error {
 			tx, txErr := db.BeginTx(grpCtx, nil)
 			if txErr != nil {
-				return txErr
+				return fmt.Errorf("BEGIN: %w", txErr)
 			}
 			defer tx.Rollback()
 			stmt, prepErr := tx.PrepareContext(grpCtx, qry)
@@ -415,7 +415,8 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 				chunk := rs.Rows
 				var err error
 				if err = grpCtx.Err(); err != nil {
-					return err
+					log.Printf("GrpRows: %+v", err)
+					return nil
 				}
 				if len(chunk) == 0 {
 					continue
@@ -502,20 +503,27 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 
 				return err
 			}
-			return tx.Commit()
+			if err := tx.Commit(); err != nil {
+				return fmt.Errorf("COMMIT: %w", err)
+			}
+			return nil
 		})
 	}
 
 	var n int64
 
+	if err := grpCtx.Err(); err != nil {
+		panic(err)
+	}
+
 	var headerSeen bool
 	chunk := (*(chunkPool.Get().(*[][]string)))[:0]
 	if err := cfg.ReadRows(grpCtx,
-		func(fn string, row dbcsv.Row) error {
+		func(ctx context.Context, fn string, row dbcsv.Row) error {
 			var err error
-			if err = grpCtx.Err(); err != nil {
-				log.Printf("Grp: %+v", err)
-				return err
+			if err = ctx.Err(); err != nil {
+				log.Printf("GrpRead: %+v", err)
+				return nil
 			}
 
 			if !headerSeen {
@@ -541,15 +549,16 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 			select {
 			case rowsCh <- rowsType{Rows: chunk, Start: n}:
 				n += int64(len(chunk))
-			case <-grpCtx.Done():
-				log.Println("CTX:", grpCtx.Err())
-				return grpCtx.Err()
+			case <-ctx.Done():
+				log.Println("CTX:", ctx.Err())
+				return nil
 			}
 
 			chunk = (*chunkPool.Get().(*[][]string))[:0]
 			return nil
 		},
 	); err != nil {
+		log.Printf("ReadRows: %+v", err)
 		return err
 	}
 
@@ -648,6 +657,20 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
 		}
 	} else if n == 0 && copyTable == "" {
 		row := <-rows
+		for len(row.Columns) == 0 {
+			var ok bool
+			select {
+			case row, ok = <-rows:
+				if !ok {
+					break
+				}
+			case <-ctx.Done():
+				return cols, ctx.Err()
+			}
+		}
+		if len(row.Columns) == 0 {
+			panic(fmt.Sprintf("empty row: %#v", row))
+		}
 		cols = make([]Column, len(row.Columns))
 		for i, v := range row.Columns {
 			cols[i].Name = mkColName(v)
@@ -911,6 +934,10 @@ func filterCols(cols []Column, fields []string) []Column {
 	for _, f := range fields {
 		if i, ok := m[strings.ToUpper(f)]; ok {
 			columns = append(columns, cols[i])
+		} else if i, ok = m[mkColName(f)]; ok {
+			columns = append(columns, cols[i])
+		} else {
+			log.Printf("filter out %q (%q)", f, mkColName(f))
 		}
 	}
 	return columns
@@ -918,28 +945,31 @@ func filterCols(cols []Column, fields []string) []Column {
 
 func mkColName(v string) string {
 	v = strings.Map(func(r rune) rune {
-		r = unicode.ToLower(r)
+		r = unicode.ToUpper(r)
 		switch r {
-		case 'á':
-			return 'a'
-		case 'é':
-			return 'e'
-		case 'í':
-			return 'i'
-		case 'ö', 'ő', 'ó':
-			return 'o'
-		case 'ü', 'ű', 'ú':
-			return 'u'
+		case 'Á':
+			return 'A'
+		case 'É':
+			return 'E'
+		case 'Í':
+			return 'I'
+		case 'Ö', 'Ő', 'Ó':
+			return 'O'
+		case 'Ü', 'Ű', 'Ú':
+			return 'U'
 		case '_':
 			return '_'
 		default:
-			if 'a' <= r && r <= 'z' || '0' <= r && r <= '9' {
+			if 'A' <= r && r <= 'Z' || '0' <= r && r <= '9' {
 				return r
 			}
 			return '_'
 		}
 	},
 		v)
+	if v[0] == '_' {
+		v = "X" + v
+	}
 	if len(v) <= 30 {
 		return v
 	}

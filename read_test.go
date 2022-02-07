@@ -43,7 +43,7 @@ func TestRead(t *testing.T) {
 		}
 		for cfg.Sheet = range sheets {
 			ctx, cancel = context.WithTimeout(context.Background(), time.Minute)
-			err = cfg.ReadRows(ctx, func(sheetName string, row dbcsv.Row) error {
+			err = cfg.ReadRows(ctx, func(ctx context.Context, sheetName string, row dbcsv.Row) error {
 				t.Log(sheetName, row)
 				return nil
 			})
@@ -89,7 +89,7 @@ func TestCompressedTempCSV(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	for i := 0; i < 10; i++ {
-		if err := cfg.ReadRows(ctx, func(s string, r dbcsv.Row) error { t.Log(s, r); return nil }); err != nil {
+		if err := cfg.ReadRows(ctx, func(ctx context.Context, s string, r dbcsv.Row) error { t.Log(s, r); return nil }); err != nil {
 			t.Error(err)
 		}
 	}
@@ -115,7 +115,7 @@ func TestReadDetectDelim(t *testing.T) {
 		}},
 	} {
 		var i int
-		if err := dbcsv.ReadCSV(ctx, func(r dbcsv.Row) error {
+		if err := dbcsv.ReadCSV(ctx, func(ctx context.Context, r dbcsv.Row) error {
 			if d := cmp.Diff(tC.Want[i], r); d != "" {
 				t.Errorf("%d: %s", i, d)
 			}

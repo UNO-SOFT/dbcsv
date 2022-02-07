@@ -281,8 +281,9 @@ func (cfg *Config) Close() error {
 	return err
 }
 
-func (cfg *Config) ReadRows(ctx context.Context, fn func(string, Row) error) (err error) {
+func (cfg *Config) ReadRows(ctx context.Context, fn func(context.Context, string, Row) error) (err error) {
 	if err = ctx.Err(); err != nil {
+		log.Printf("cTx: %+v", err)
 		return err
 	}
 	if err := cfg.parseColumnsString(); err != nil {
@@ -303,7 +304,7 @@ func (cfg *Config) ReadRows(ctx context.Context, fn func(string, Row) error) (er
 		return err
 	}
 	r := transform.NewReader(cfg.rdr, enc.NewDecoder())
-	return ReadCSV(ctx, func(row Row) error { return fn(cfg.fileName, row) }, r, cfg.Delim, cfg.columns, cfg.Skip)
+	return ReadCSV(ctx, func(ctx context.Context, row Row) error { return fn(ctx, cfg.fileName, row) }, r, cfg.Delim, cfg.columns, cfg.Skip)
 }
 func (cfg *Config) parseColumnsString() error {
 	if cfg.columns != nil || cfg.ColumnsString == "" {
@@ -351,8 +352,9 @@ func (cfg *Config) ReadSheets(ctx context.Context) (map[int]string, error) {
 	return map[int]string{1: cfg.fileName}, nil
 }
 
-func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename string, sheetIndex int, columns []int, skip int) error {
+func ReadXLSXFile(ctx context.Context, fn func(context.Context, string, Row) error, filename string, sheetIndex int, columns []int, skip int) error {
 	if err := ctx.Err(); err != nil {
+		log.Printf("ctX: %+v", err)
 		return err
 	}
 	xlFile, err := excelize.OpenFile(filename)
@@ -403,6 +405,7 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 			}
 		}
 	}
+	var colNames []string
 	i := 0
 	for rows.Next() {
 		i++
@@ -411,14 +414,15 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 		}
 		row, err := rows.Columns()
 		if err != nil {
-			return err
+			return fmt.Errorf("%d.Columns: %w", i, err)
 		}
 		if row == nil {
 			continue
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			log.Printf("ctx1: %+v", ctx.Err())
+			return nil
 		default:
 		}
 
@@ -430,7 +434,7 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 			}
 			styleID, err := xlFile.GetCellStyle(sheetName, axis)
 			if err != nil {
-				return err
+				return fmt.Errorf("GetCellStyle(%q, %q): %w", sheetName, axis, err)
 			}
 			xf := xlFile.Styles.CellXfs.Xf[styleID]
 			// http://officeopenxml.com/SSstyles.php
@@ -451,7 +455,7 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 			}
 			v, err := xlFile.GetCellValue(sheetName, axis, excelize.Options{RawCellValue: true})
 			if err != nil {
-				return err
+				return fmt.Errorf("GetCellValue(%q, %q): %w", sheetName, axis, err)
 			}
 			if v == "" {
 				continue
@@ -473,17 +477,21 @@ func ReadXLSXFile(ctx context.Context, fn func(string, Row) error, filename stri
 			}
 			//log.Println("dateCols:", dateCols)
 		}
+		if colNames == nil {
+			colNames = append(make([]string, 0, len(row)), row...)
+		}
 
-		if err := fn(sheetName, Row{Line: n, Values: row}); err != nil {
-			return err
+		if err := fn(ctx, sheetName, Row{Columns: colNames, Line: n, Values: row}); err != nil {
+			return fmt.Errorf("fn(%q, %#v): %w", sheetName, Row{Columns: colNames, Line: n, Values: row}, err)
 		}
 		n++
 	}
 	return nil
 }
 
-func ReadXLSFile(ctx context.Context, fn func(string, Row) error, filename string, charset string, sheetIndex int, columns []int, skip int) error {
+func ReadXLSFile(ctx context.Context, fn func(context.Context, string, Row) error, filename string, charset string, sheetIndex int, columns []int, skip int) error {
 	if err := ctx.Err(); err != nil {
+		log.Printf("Ctx: +%v", err)
 		return err
 	}
 	wb, err := xls.Open(filename, charset)
@@ -501,6 +509,7 @@ func ReadXLSFile(ctx context.Context, fn func(string, Row) error, filename strin
 			need[i] = true
 		}
 	}
+	var colNames []string
 	var maxWidth int
 	for n := 0; n < int(sheet.MaxRow); n++ {
 		row := sheet.Row(n)
@@ -511,6 +520,7 @@ func ReadXLSFile(ctx context.Context, fn func(string, Row) error, filename strin
 			continue
 		}
 		if err := ctx.Err(); err != nil {
+			log.Printf("ctx: +%v", err)
 			return err
 		}
 		vals := make([]string, 0, maxWidth)
@@ -528,19 +538,23 @@ func ReadXLSFile(ctx context.Context, fn func(string, Row) error, filename strin
 			}
 			vals[j-off] = row.Col(j)
 		}
+		if colNames == nil {
+			colNames = append(make([]string, 0, len(vals)), vals...)
+		}
 		select {
 		case <-ctx.Done():
+			log.Printf("ctx2: %+v", err)
 			return ctx.Err()
 		default:
 		}
-		if err := fn(sheet.Name, Row{Line: n, Values: vals}); err != nil {
+		if err := fn(ctx, sheet.Name, Row{Columns: colNames, Line: n, Values: vals}); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func ReadCSV(ctx context.Context, fn func(Row) error, r io.Reader, delim string, columns []int, skip int) error {
+func ReadCSV(ctx context.Context, fn func(context.Context, Row) error, r io.Reader, delim string, columns []int, skip int) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -598,7 +612,7 @@ func ReadCSV(ctx context.Context, fn func(Row) error, r io.Reader, delim string,
 			log.Printf("Ctx: %v", ctx.Err())
 			return ctx.Err()
 		}
-		if err := fn(Row{Columns: colNames, Line: n - 1, Values: row}); err != nil {
+		if err := fn(ctx, Row{Columns: colNames, Line: n - 1, Values: row}); err != nil {
 			if !errors.Is(err, context.Canceled) {
 				log.Printf("Consume %d. row: %+v", n, err)
 			}
