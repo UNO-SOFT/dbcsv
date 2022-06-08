@@ -1,4 +1,4 @@
-// Copyright 2020 Tamás Gulácsi.
+// Copyright 2020, 2022 Tamás Gulácsi.
 //
 //
 // SPDX-License-Identifier: UPL-1.0 OR Apache-2.0
@@ -50,6 +50,8 @@ func Main() error {
 	flagSort := flag.Bool("sort", false, "sort data")
 	flagSheets := dbcsv.FlagStrings()
 	flag.Var(flagSheets, "sheet", "each -sheet=name:SELECT will become a separate sheet on the output ods")
+	flagParams := dbcsv.FlagStrings()
+	flag.Var(flagParams, "param", "each -param=asdf will becoma separate parameter (:1, :2, ...)")
 	flagVerbose := flag.Bool("v", false, "verbose logging")
 	flagCompress := flag.String("compress", "", "compress output with gz/gzip or zst/zstd/zstandard")
 	flagCall := flag.Bool("call", false, "the first argument is not the WHERE, but the PL/SQL block to be called, the followings are not the columns but the arguments")
@@ -133,6 +135,10 @@ and dump all the columns of the cursor returned by the function.
 		}
 		queries = append(queries, qry)
 	} else {
+		params = make([]interface{}, len(flagParams.Strings))
+		for i, p := range flagParams.Strings {
+			params[i] = p
+		}
 		var (
 			where   string
 			columns []string
@@ -330,9 +336,9 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 	} else {
 		origQry := qry
 		if doSort && strings.HasPrefix(qry, "SELECT * FROM") {
-			rows, err := db.QueryContext(ctx, qry+" FETCH FIRST ROW ONLY")
+			rows, err := db.QueryContext(ctx, qry+" FETCH FIRST ROW ONLY", params...)
 			if err != nil {
-				if rows, err = db.QueryContext(ctx, qry); err != nil {
+				if rows, err = db.QueryContext(ctx, qry, params...); err != nil {
 					return nil, nil, fmt.Errorf("%s: %w", qry, err)
 				}
 			}
@@ -390,9 +396,10 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 			}
 		}
 		//log.Println("QRY:", qry, "batchSize:", batchSize)
-		if rows, err = db.QueryContext(ctx, qry, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize+1)); err != nil {
+		params = append(params, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize+1))
+		if rows, err = db.QueryContext(ctx, qry, params...); err != nil {
 			qry = origQry
-			rows, err = db.QueryContext(ctx, qry, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize+1))
+			rows, err = db.QueryContext(ctx, qry, params...)
 		}
 	}
 	if err != nil {
