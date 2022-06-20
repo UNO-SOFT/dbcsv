@@ -395,6 +395,7 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 				}
 			}
 		}
+		qry = strings.TrimSuffix(strings.TrimSpace(qry), ";")
 		//log.Println("QRY:", qry, "batchSize:", batchSize)
 		params = append(params, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize+1))
 		if rows, err = db.QueryContext(ctx, qry, params...); err != nil {
