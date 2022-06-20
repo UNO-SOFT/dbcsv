@@ -198,7 +198,8 @@ and dump all the columns of the cursor returned by the function.
 	defer tx.Rollback()
 
 	if len(flagSheets.Strings) == 0 &&
-		(strings.HasSuffix(*flagOut, ".ods") || strings.HasSuffix(*flagOut, ".xlsx")) {
+		!strings.HasSuffix(*flagOut, ".ods") &&
+		!strings.HasSuffix(*flagOut, ".xlsx") {
 		w := encoding.ReplaceUnsupported(enc.NewEncoder()).Writer(wfh)
 		if Log != nil {
 			_ = Log("env_encoding", dbcsv.DefaultEncoding.Name)
