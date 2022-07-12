@@ -28,6 +28,7 @@ import (
 	"unicode"
 
 	"github.com/UNO-SOFT/dbcsv"
+	"github.com/tgulacsi/go/zlog"
 
 	"github.com/peterbourgon/ff/v3/ffcli"
 	"golang.org/x/sync/errgroup"
@@ -35,9 +36,12 @@ import (
 	"github.com/godror/godror"
 )
 
+var logger = zlog.New(zlog.MaybeConsoleWriter(os.Stderr))
+
 func main() {
 	if err := Main(); err != nil {
-		log.Fatal(err)
+		logger.Error(err, "Main")
+		os.Exit(1)
 	}
 }
 
@@ -151,10 +155,10 @@ func Main() error {
 	if *flagCPUProf != "" {
 		f, err := os.Create(*flagCPUProf)
 		if err != nil {
-			log.Fatal("could not create CPU profile: ", err)
+			return fmt.Errorf("create CPU profile: %w", err)
 		}
 		if err := pprof.StartCPUProfile(f); err != nil {
-			log.Fatal("could not start CPU profile: ", err)
+			return fmt.Errorf("start CPU profile: %w", err)
 		}
 		defer pprof.StopCPUProfile()
 	}
@@ -162,15 +166,15 @@ func Main() error {
 	if *flagMemProf != "" {
 		f, err := os.Create(*flagMemProf)
 		if err != nil {
-			log.Fatal("could not create memory profile: ", err)
+			return fmt.Errorf("create memory profile: %w", err)
 		}
 		defer f.Close()
 		cfg.WriteHeapProf = func() {
-			log.Println("writeHeapProf")
+			logger.V(1).Info("writeHeapProf")
 			_, _ = f.Seek(0, 0)
 			runtime.GC() // get up-to-date statistics
 			if err := pprof.WriteHeapProfile(f); err != nil {
-				log.Fatal("could not write memory profile: ", err)
+				logger.Error(err, "write memory profile")
 			}
 		}
 	}
@@ -221,7 +225,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	select {
 	case err := <-firstRowErr:
 		if err != nil {
-			log.Printf("First row: %+v", err)
+			logger.Error(err, "first row")
 			return err
 		}
 	case <-grpCtx.Done():
@@ -230,7 +234,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	if len(fields) == 0 {
 		fields = firstRow.Columns
 	}
-	//log.Printf("fields: %q", fields)
+	logger.V(1).Info("first row", "fields", fields)
 
 	if cfg.JustPrint {
 		fmt.Println("INSERT ALL")
@@ -328,7 +332,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		qry = tbl
 		s := qry[strings.Index(qry, "VALUES")+6:]
 		s = s[strings.IndexByte(s, '(')+1 : strings.LastIndexByte(s, ')')]
-		log.Println(s)
+		logger.V(1).Info("full insert", "qry", s)
 		for x, i := strings.Count(s, ":"), 0; i < x; i++ {
 			columns = append(columns, Column{Name: fmt.Sprintf("%d", i+1)})
 		}
@@ -344,7 +348,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		}()
 		columns, err = CreateTable(defCtx, db, tbl, ctRows, cfg.Truncate, cfg.Tablespace, cfg.Copy, cfg.ForceString)
 		if err != nil {
-			log.Printf("Create table %q: %+v", tbl, err)
+			logger.Error(err, "create", "table", tbl)
 			return err
 		}
 		columns = filterCols(columns, fields)
@@ -370,7 +374,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	if err := grp.Wait(); err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
-	log.Println(qry)
+	logger.Info("synthetized", "qry", qry)
 
 	var hasLOB bool
 	chunkSize := cfg.ChunkSize
@@ -415,7 +419,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 				chunk := rs.Rows
 				var err error
 				if err = grpCtx.Err(); err != nil {
-					log.Printf("GrpRows: %+v", err)
+					logger.Error(err, "GrpRows")
 					return nil
 				}
 				if len(chunk) == 0 {
@@ -446,10 +450,10 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 
 				for i, col := range cols {
 					if rowsI[i], err = columns[i].FromString(col); err != nil {
-						log.Printf("%d. col: %+v", i, err)
+						logger.Error(err, "FromString", "col", i)
 						for k, row := range chunk {
 							if _, err = columns[i].FromString(col[k : k+1]); err != nil {
-								log.Printf("%d.%q %q: %q", rs.Start+int64(k), columns[i].Name, col[k:k+1], row)
+								logger.Error(err, "FromString", "start", rs.Start+int64(k), "column", columns[i].Name, "value", col[k:k+1], "row", row)
 								break
 							}
 						}
@@ -471,12 +475,11 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 					continue
 				}
 				if chunkSize == 1 {
-					err = fmt.Errorf("%s [%v]: %w", qry, rowsI, err)
-					log.Println(err)
-					return err
+					logger.Error(err, "exec", "qry", qry, "rows", rowsI)
+					return fmt.Errorf("%s [%v]: %w", qry, rowsI, err)
 				}
+				logger.Error(err, "exec", "qry", qry)
 				err = fmt.Errorf("%s: %w", qry, err)
-				log.Println(err)
 
 				rowsR := make([]reflect.Value, len(rowsI))
 				rowsI2 := make([]interface{}, len(rowsI))
@@ -488,16 +491,15 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 				for j := range cols[0] { // rows
 					for i, r := range rowsR { // cols
 						if r.Len() <= j {
-							log.Printf("%d[%q]=%d", j, columns[i].Name, r.Len())
+							logger.Info("debug", "row", j, "column", columns[i].Name, "len", r.Len())
 							rowsI2[i] = ""
 							continue
 						}
 						R2.Index(i).Set(r.Index(j))
 					}
 					if _, err = stmt.Exec(rowsI2...); err != nil {
-						err = fmt.Errorf("%s, %q: %w", qry, rowsI2, err)
-						log.Println(err)
-						return err
+						logger.Error(err, "exec", "rows", rowsI2)
+						return fmt.Errorf("%s, %q: %w", qry, rowsI2, err)
 					}
 				}
 
@@ -522,7 +524,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		func(ctx context.Context, fn string, row dbcsv.Row) error {
 			var err error
 			if err = ctx.Err(); err != nil {
-				log.Printf("GrpRead: %+v", err)
+				logger.Error(err, "GrpRead")
 				return nil
 			}
 
@@ -550,7 +552,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 			case rowsCh <- rowsType{Rows: chunk, Start: n}:
 				n += int64(len(chunk))
 			case <-ctx.Done():
-				log.Println("CTX:", ctx.Err())
+				logger.Error(ctx.Err(), "CTX")
 				return nil
 			}
 
@@ -558,7 +560,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 			return nil
 		},
 	); err != nil {
-		log.Printf("ReadRows: %+v", err)
+		logger.Error(err, "ReadRows")
 		return err
 	}
 
@@ -570,10 +572,10 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 
 	err := grp.Wait()
 	if err != nil {
-		log.Printf("ERROR: %+v", err)
+		logger.Error(err, "ERROR")
 	}
 	dur := time.Since(start)
-	log.Printf("Read %d, inserted %d rows from %q to %q in %s.", n, inserted, src, tbl, dur)
+	logger.V(1).Info("read finished", "read", n, "inserted", inserted, "src", src, "tbl", tbl, "dur", dur.String())
 	return err
 }
 

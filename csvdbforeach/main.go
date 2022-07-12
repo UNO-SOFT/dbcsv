@@ -13,7 +13,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strings"
 	"sync"
@@ -21,6 +20,7 @@ import (
 	"time"
 
 	"github.com/UNO-SOFT/dbcsv"
+	"github.com/tgulacsi/go/zlog"
 	"golang.org/x/text/encoding/htmlindex"
 	"golang.org/x/text/transform"
 
@@ -31,12 +31,13 @@ var (
 	stdout = io.Writer(os.Stdout)
 	stderr = io.Writer(os.Stderr)
 
-	//Log = func(keyvals ...interface{}) error { return nil }
+	logger = zlog.New(zlog.MaybeConsoleWriter(os.Stderr))
 )
 
 func main() {
 	if err := Main(); err != nil {
-		log.Fatalf("ERROR: %+v", err)
+		logger.Error(err, "Main")
+		os.Exit(1)
 	}
 }
 
@@ -50,7 +51,6 @@ func Main() error {
 			}
 			stdout = transform.NewWriter(stdout, enc.NewEncoder())
 			stderr = transform.NewWriter(stderr, enc.NewEncoder())
-			log.SetOutput(stderr)
 		}
 	}
 	bw := bufio.NewWriter(stdout)
@@ -120,7 +120,7 @@ Usage:
 		defer errWg.Done()
 		for err := range errch {
 			if err != nil {
-				log.Printf("ERROR: %+v", err)
+				logger.Error(err, "ERROR")
 				errs = append(errs, err.Error())
 			}
 		}
@@ -131,7 +131,7 @@ Usage:
 	go func(rows chan<- dbcsv.Row) {
 		defer close(rows)
 		errch <- cfg.ReadRows(ctx,
-			func(_ string, row dbcsv.Row) error {
+			func(ctx context.Context, _ string, row dbcsv.Row) error {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -202,7 +202,7 @@ Usage:
 	if len(errs) > 0 {
 		return fmt.Errorf("ERRORS:\n\t" + strings.Join(errs, "\n\t"))
 	}
-	log.Printf("Processed %d rows in %s.", n, d)
+	logger.V(1).Info("processed", "rows", n, "dur", d.String())
 	return nil
 }
 

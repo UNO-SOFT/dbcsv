@@ -28,14 +28,21 @@ import (
 	"github.com/UNO-SOFT/spreadsheet"
 	"github.com/UNO-SOFT/spreadsheet/ods"
 	"github.com/UNO-SOFT/spreadsheet/xlsx"
+	"github.com/go-logr/logr"
 	"github.com/godror/godror"
 	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/compress/zstd"
+	"github.com/rs/zerolog"
+
+	"github.com/tgulacsi/go/zlog"
 )
+
+var logger = zlog.New(zlog.MaybeConsoleWriter(os.Stderr))
 
 func main() {
 	if err := Main(); err != nil {
-		log.Fatalf("%+v", err)
+		logger.Error(err, "Main")
+		os.Exit(1)
 	}
 }
 
@@ -76,23 +83,8 @@ and dump all the columns of the cursor returned by the function.
 	}
 	flag.Parse()
 
-	Log := func(...interface{}) error { return nil }
 	if *flagVerbose {
-		Log = func(keyvals ...interface{}) error {
-			if len(keyvals)%2 != 0 {
-				keyvals = append(keyvals, "")
-			}
-			vv := make([]interface{}, len(keyvals)/2)
-			for i := range vv {
-				v := fmt.Sprintf("%+v", keyvals[(i<<1)+1])
-				if strings.Contains(v, " ") {
-					v = `"` + v + `"`
-				}
-				vv[i] = fmt.Sprintf("%s=%s", keyvals[(i<<1)], v)
-			}
-			log.Println(vv...)
-			return nil
-		}
+		zlog.SetLevel(logger, zerolog.TraceLevel)
 	}
 
 	enc, err := dbcsv.EncFromName(*flagEnc)
@@ -130,9 +122,7 @@ and dump all the columns of the cursor returned by the function.
 		}
 		buf.WriteString("); END;")
 		qry := buf.String()
-		if Log != nil {
-			_ = Log("call", qry, "params", params)
-		}
+		logger.Info("call", qry, "params", params)
 		queries = append(queries, qry)
 	} else {
 		params = make([]interface{}, len(flagParams.Strings))
@@ -161,6 +151,7 @@ and dump all the columns of the cursor returned by the function.
 	db.SetMaxIdleConns(1)
 	ctx, cancel := context.WithTimeout(context.Background(), *flagTimeout)
 	defer cancel()
+	ctx = logr.NewContext(ctx, logger)
 	ctx, cancel = dbcsv.Wrap(ctx)
 	defer cancel()
 
@@ -185,9 +176,7 @@ and dump all the columns of the cursor returned by the function.
 		}
 	}
 
-	if Log != nil {
-		_ = Log("msg", "writing", "file", fh.Name(), "encoding", enc)
-	}
+	logger.V(1).Info("writing", "file", fh.Name(), "encoding", enc)
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		log.Printf("[WARN] Read-Only transaction: %v", err)
@@ -201,16 +190,14 @@ and dump all the columns of the cursor returned by the function.
 		!strings.HasSuffix(*flagOut, ".ods") &&
 		!strings.HasSuffix(*flagOut, ".xlsx") {
 		w := encoding.ReplaceUnsupported(enc.NewEncoder()).Writer(wfh)
-		if Log != nil {
-			_ = Log("env_encoding", dbcsv.DefaultEncoding.Name)
-		}
+		logger.V(1).Info("encoding", "env", dbcsv.DefaultEncoding.Name)
 
 		rows, columns, qErr := doQuery(ctx, tx, queries[0], params, *flagCall, *flagSort)
 		if qErr != nil {
 			err = qErr
 		} else {
 			defer rows.Close()
-			err = dbcsv.DumpCSV(ctx, w, rows, columns, *flagHeader, *flagSep, *flagRaw, Log)
+			err = dbcsv.DumpCSV(ctx, w, rows, columns, *flagHeader, *flagSep, *flagRaw)
 		}
 	} else {
 		var w spreadsheet.Writer
@@ -256,8 +243,8 @@ and dump all the columns of the cursor returned by the function.
 				break
 			}
 			grp.Go(func() error {
-				_ = Log(name, qry)
-				err := dbcsv.DumpSheet(grpCtx, sheet, rows, columns, Log)
+				logger.V(1).Info("DumpSheet", "name", name, "qry", qry)
+				err := dbcsv.DumpSheet(grpCtx, sheet, rows, columns)
 				rows.Close()
 				if closeErr := sheet.Close(); closeErr != nil && err == nil {
 					return closeErr
@@ -334,6 +321,8 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 			params...)
 		if _, err = db.ExecContext(ctx, qry, params...); err == nil {
 			rows, err = godror.WrapRows(ctx, db, dRows)
+		} else {
+			logger.Error(err, "call", "qry", qry, "params", fmt.Sprintf("%#v", params))
 		}
 	} else {
 		origQry := qry

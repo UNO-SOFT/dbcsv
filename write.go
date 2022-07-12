@@ -19,9 +19,11 @@ import (
 	"time"
 
 	"github.com/UNO-SOFT/spreadsheet"
+	"github.com/go-logr/logr"
 )
 
-func DumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column, header bool, sep string, raw bool, Log func(...interface{}) error) error {
+func DumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column, header bool, sep string, raw bool) error {
+	logger := logr.FromContextOrDiscard(ctx)
 	sepB := []byte(sep)
 	dest := make([]interface{}, len(columns))
 	bw := bufio.NewWriterSize(w, 65536)
@@ -84,13 +86,12 @@ func DumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column,
 	}
 	err := rows.Err()
 	dur := time.Since(start)
-	if Log != nil {
-		_ = Log("msg", "dump finished", "rows", n, "dur", dur.String(), "speed", fmt.Sprintf("%.3f 1/s", float64(n)/float64(dur*time.Second)), "error", err)
-	}
+	logger.V(1).Info("dump finished", "rows", n, "dur", dur.String(), "speed", fmt.Sprintf("%.3f 1/s", float64(n)/float64(dur*time.Second)), "error", err)
 	return err
 }
 
-func DumpSheet(ctx context.Context, sheet spreadsheet.Sheet, rows *sql.Rows, columns []Column, Log func(...interface{}) error) error {
+func DumpSheet(ctx context.Context, sheet spreadsheet.Sheet, rows *sql.Rows, columns []Column) error {
+	logger := logr.FromContextOrDiscard(ctx)
 	dest := make([]interface{}, len(columns))
 	vals := make([]interface{}, len(columns))
 	values := make([]Stringer, len(columns))
@@ -116,9 +117,7 @@ func DumpSheet(ctx context.Context, sheet spreadsheet.Sheet, rows *sql.Rows, col
 	}
 	err := rows.Err()
 	dur := time.Since(start)
-	if Log != nil {
-		_ = Log("msg", "dump finished", "rows", n, "dur", dur, "speed", float64(n)/float64(dur)*float64(time.Second), "error", err)
-	}
+	logger.V(1).Info("dump finished", "rows", n, "dur", dur.String(), "speed", float64(n)/float64(dur)*float64(time.Second), "error", err)
 	return err
 }
 
