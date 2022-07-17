@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"strconv"
@@ -213,7 +212,7 @@ func (cfg *Config) Open(fileName string) error {
 	var fh *os.File
 	if slurp {
 		var tmpErr error
-		if fh, tmpErr = ioutil.TempFile("", "ReadRows-"); tmpErr != nil {
+		if fh, tmpErr = os.CreateTemp("", "ReadRows-"); tmpErr != nil {
 			return tmpErr
 		}
 		defer fh.Close()

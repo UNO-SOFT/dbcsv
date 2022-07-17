@@ -13,7 +13,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -277,7 +276,7 @@ func getQuery(table, where string, columns []string, enc encoding.Encoding) stri
 		if enc == nil {
 			enc = encoding.Nop
 		}
-		b, err := ioutil.ReadAll(enc.NewDecoder().Reader(os.Stdin))
+		b, err := io.ReadAll(enc.NewDecoder().Reader(os.Stdin))
 		if err != nil {
 			panic(err)
 		}
