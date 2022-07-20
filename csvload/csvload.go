@@ -708,7 +708,7 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
 				fmt.Fprintf(&buf, "  %s DATE", c.Name)
 				continue
 			}
-			length := c.Length
+			length := c.Length * 2
 			if length == 0 {
 				length = 1
 			}
