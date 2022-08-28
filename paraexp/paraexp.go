@@ -1,4 +1,4 @@
-// Copyright 2020 Tamás Gulácsi.
+// Copyright 2020, 2022 Tamás Gulácsi.
 //
 //
 // SPDX-License-Identifier: UPL-1.0 OR Apache-2.0
@@ -118,7 +118,8 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 
 	fh := os.Stdout
 	if !(*flagOut == "" || *flagOut == "-") {
-		_ = os.MkdirAll(filepath.Dir(*flagOut), 0775)
+		// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
+		_ = os.MkdirAll(filepath.Dir(*flagOut), 0750)
 		if fh, err = os.Create(*flagOut); err != nil {
 			return fmt.Errorf("%s: %w", *flagOut, err)
 		}
@@ -127,9 +128,7 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 	bw := bufio.NewWriter(fh)
 	defer bw.Flush()
 
-	if Log != nil {
-		_ = Log("msg", "writing", "file", fh.Name())
-	}
+	_ = Log("msg", "writing", "file", fh.Name())
 
 	if _, err := bw.WriteString("[\n"); err != nil {
 		return err

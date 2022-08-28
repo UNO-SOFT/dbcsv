@@ -4,6 +4,7 @@
 
 package main
 
+// nosemgrep: go.lang.security.audit.xss.import-text-template.import-text-template
 import (
 	"bufio"
 	"bytes"

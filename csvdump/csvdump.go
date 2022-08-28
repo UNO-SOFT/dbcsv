@@ -156,7 +156,8 @@ and dump all the columns of the cursor returned by the function.
 
 	fh := os.Stdout
 	if !(*flagOut == "" || *flagOut == "-") {
-		_ = os.MkdirAll(filepath.Dir(*flagOut), 0775)
+		// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
+		_ = os.MkdirAll(filepath.Dir(*flagOut), 0750)
 		if fh, err = os.Create(*flagOut); err != nil {
 			return fmt.Errorf("%s: %w", *flagOut, err)
 		}

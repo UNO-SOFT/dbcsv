@@ -134,9 +134,12 @@ func (cfg *Config) Encoding() (encoding.Encoding, error) {
 	if cfg.Charset == "" {
 		return DefaultEncoding, nil
 	}
-	var err error
-	cfg.encoding, err = htmlindex.Get(cfg.Charset)
-	return cfg.encoding, err
+	enc, err := htmlindex.Get(cfg.Charset)
+	if err != nil {
+		return nil, err
+	}
+	cfg.encoding = enc
+	return enc, err
 }
 
 func (cfg *Config) Columns() ([]int, error) {
@@ -152,10 +155,12 @@ func (cfg *Config) Rewind() error {
 		return err
 	}
 	if cfg.zr != nil {
-		if cfg.zr, err = zstd.NewReader(cfg.file); err != nil {
+		if zr, err := zstd.NewReader(cfg.file); err != nil {
 			return err
+		} else {
+			cfg.zr = zr
+			cfg.rdr = zr.IOReadCloser()
 		}
-		cfg.rdr = cfg.zr.IOReadCloser()
 	}
 	return err
 }
@@ -164,11 +169,11 @@ func (cfg *Config) Type() (FileType, error) {
 	if cfg.typ.Type != Unknown {
 		return cfg.typ, nil
 	}
-	var err error
-	cfg.typ, err = DetectReaderType(cfg.file, cfg.fileName)
+	typ, err := DetectReaderType(cfg.file, cfg.fileName)
 	if err == nil {
 		err = cfg.Rewind()
 	}
+	cfg.typ = typ
 	return cfg.typ, err
 }
 
@@ -177,23 +182,25 @@ func (cfg *Config) Open(fileName string) error {
 	if slurp {
 		cfg.file, fileName = os.Stdin, "-"
 	} else {
-		var err error
-		if cfg.file, err = os.Open(fileName); err != nil {
+		f, err := os.Open(fileName)
+		if err != nil {
 			return fmt.Errorf("open %s: %w", fileName, err)
 		}
-		fi, err := cfg.file.Stat()
+		fi, err := f.Stat()
 		if err != nil {
-			cfg.file.Close()
+			f.Close()
 			return fmt.Errorf("stat %s: %w", fileName, err)
 		}
+		cfg.file = f
 		slurp = !fi.Mode().IsRegular()
 	}
-	var err error
 	var buf bytes.Buffer
 	r := io.Reader(cfg.file)
-	if cfg.typ, err = DetectReaderType(io.TeeReader(r, &buf), cfg.fileName); err != nil {
+	typ, err := DetectReaderType(io.TeeReader(r, &buf), cfg.fileName)
+	if err != nil {
 		return err
 	}
+	cfg.typ = typ
 	r = io.MultiReader(bytes.NewReader(buf.Bytes()), r)
 
 	if cfg.typ.Compression != "" {
@@ -242,15 +249,21 @@ func (cfg *Config) Open(fileName string) error {
 		if err = fh.Close(); err != nil {
 			return err
 		}
-		if cfg.file, err = os.Open(fh.Name()); err != nil {
-			return err
-		}
-		os.Remove(fh.Name())
-		if compress {
-			if cfg.zr, err = zstd.NewReader(cfg.file); err != nil {
+		{
+			f, err := os.Open(fh.Name())
+			if err != nil {
 				return err
 			}
-			cfg.rdr = cfg.zr.IOReadCloser()
+			cfg.file = f
+		}
+		_ = os.Remove(fh.Name())
+		if compress {
+			zr, err := zstd.NewReader(cfg.file)
+			if err != nil {
+				return err
+			}
+			cfg.zr = zr
+			cfg.rdr = zr.IOReadCloser()
 		}
 	}
 	cfg.fileName = fileName

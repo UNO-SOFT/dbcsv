@@ -640,8 +640,10 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
 		return cols, fmt.Errorf("%s: %w", qry, err)
 	}
 	if n > 0 && truncate {
+		// nosemgrep: go.lang.security.audit.database.string-formatted-query.string-formatted-query
 		qry = `TRUNCATE TABLE ` + ownerDot + tbl
 		if _, err := db.ExecContext(ctx, qry); err != nil {
+			// nosemgrep: go.lang.security.audit.database.string-formatted-query.string-formatted-query
 			if _, delErr := db.ExecContext(ctx, "DELETE FROM "+ownerDot+tbl); delErr != nil {
 				return cols, fmt.Errorf("%s: %w", qry, err)
 			}
@@ -659,12 +661,13 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
 		}
 	} else if n == 0 && copyTable == "" {
 		row := <-rows
+	Loop:
 		for len(row.Columns) == 0 {
 			var ok bool
 			select {
 			case row, ok = <-rows:
 				if !ok {
-					break
+					break Loop
 				}
 			case <-ctx.Done():
 				return cols, ctx.Err()

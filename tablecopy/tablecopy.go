@@ -1,4 +1,4 @@
-// Copyright 2021 Tamás Gulácsi. All rights reserved.
+// Copyright 2021, 2022 Tamás Gulácsi. All rights reserved.
 
 // SPDX-License-Identifier: Apache-2.0
 
@@ -207,16 +207,20 @@ will execute a "SELECT * FROM Source_table@source_db WHERE F_ield=1" and an "INS
 			task.Dst = task.Src
 		}
 		if !strings.EqualFold(task.Dst, task.Src) || dstP.String() != srcP.String() {
-			if _, err = dstDB.ExecContext(subCtx, fmt.Sprintf("CREATE TABLE %s AS SELECT * FROM %s WHERE 1=0", task.Dst, task.Src)); err != nil {
+			// nosemgrep: go.lang.security.audit.database.string-formatted-query.string-formatted-query
+			qry := "CREATE TABLE " + task.Dst + " AS SELECT * FROM " + task.Src + " WHERE 1=0"
+			if _, err = dstDB.ExecContext(subCtx, qry); err != nil {
 				if !strings.Contains(err.Error(), "ORA-00955:") {
-					return err
+					return fmt.Errorf("%s: %w", qry, err)
 				}
 			}
 			if task.Truncate {
 				if Log != nil {
 					_ = Log("msg", "TRUNCATE", "table", task.Dst)
 				}
+				// nosemgrep: go.lang.security.audit.database.string-formatted-query.string-formatted-query
 				if _, err := dstDB.ExecContext(subCtx, "TRUNCATE TABLE "+task.Dst); err != nil {
+					// nosemgrep: go.lang.security.audit.database.string-formatted-query.string-formatted-query
 					if _, err = dstDB.ExecContext(subCtx, "DELETE FROM "+task.Dst); err != nil {
 						return fmt.Errorf("TRUNCATE TABLE %s: %w", task.Dst, err)
 					}
@@ -385,6 +389,7 @@ func One(ctx context.Context, dstTx, srcTx *sql.Tx, task copyTask, batchSize int
 }
 
 func getColumns(ctx context.Context, tx *sql.Tx, tbl string) ([]string, error) {
+	// nosemgrep: go.lang.security.audit.database.string-formatted-query.string-formatted-query
 	qry := "SELECT * FROM " + tbl + " WHERE 1=0"
 	rows, err := tx.QueryContext(ctx, qry)
 	if err != nil {

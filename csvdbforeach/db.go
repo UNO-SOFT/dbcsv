@@ -284,15 +284,17 @@ func strToDate(s string) (interface{}, error) {
 	if s == "" {
 		return nil, nil
 	}
-	var nt sql.NullTime
+	var t time.Time
 	var err error
 	if len(s) < 14 {
-		nt.Time, err = time.ParseInLocation(DateFormat, s[:8], time.Local)
+		t, err = time.ParseInLocation(DateFormat, s[:8], time.Local)
 	} else {
-		nt.Time, err = time.ParseInLocation(DateTimeFormat, s, time.Local)
+		t, err = time.ParseInLocation(DateTimeFormat, s, time.Local)
 	}
-	nt.Valid = err == nil && !nt.Time.IsZero()
-	return nt, err
+	if err != nil {
+		return sql.NullTime{}, err
+	}
+	return sql.NullTime{Valid: !t.IsZero(), Time: t}, nil
 }
 func justNums(s string, maxLen int) string {
 	var i int
