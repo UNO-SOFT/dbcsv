@@ -28,7 +28,7 @@ import (
 	"unicode"
 
 	"github.com/UNO-SOFT/dbcsv"
-	"github.com/tgulacsi/go/zlog"
+	"github.com/UNO-SOFT/zlog"
 
 	"github.com/peterbourgon/ff/v3/ffcli"
 	"golang.org/x/sync/errgroup"

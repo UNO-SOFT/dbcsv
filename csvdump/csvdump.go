@@ -33,7 +33,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"github.com/rs/zerolog"
 
-	"github.com/tgulacsi/go/zlog"
+	"github.com/UNO-SOFT/zlog"
 )
 
 var logger = zlog.New(zlog.MaybeConsoleWriter(os.Stderr))

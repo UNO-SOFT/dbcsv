@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/UNO-SOFT/dbcsv"
-	"github.com/tgulacsi/go/zlog"
+	"github.com/UNO-SOFT/zlog"
 	"golang.org/x/text/encoding/htmlindex"
 	"golang.org/x/text/transform"
 
