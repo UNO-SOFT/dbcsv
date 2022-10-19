@@ -7,12 +7,12 @@ require (
 	github.com/extrame/goyymmdd v0.0.0-20210114090516-7cc815f00d1a // indirect
 	github.com/extrame/ole2 v0.0.0-20160812065207-d69429661ad7 // indirect
 	github.com/extrame/xls v0.0.2-0.20180905092746-539786826ced
-	github.com/godror/godror v0.30.0
+	github.com/godror/godror v0.34.0
 	github.com/klauspost/compress v1.15.7
 	github.com/peterbourgon/ff/v3 v3.0.0
 	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d // indirect
 	golang.org/x/net v0.0.0-20220630215102-69896b714898 // indirect
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	golang.org/x/sync v0.0.0-20220513210516-0976fa681c29
 	golang.org/x/text v0.3.7
 )
 
@@ -25,7 +25,7 @@ require (
 )
 
 require (
-	github.com/go-logfmt/logfmt v0.5.0 // indirect
+	github.com/go-logfmt/logfmt v0.5.1 // indirect
 	github.com/go-logr/zerologr v1.2.2 // indirect
 	github.com/godror/knownpb v0.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect
