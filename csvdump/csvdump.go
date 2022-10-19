@@ -241,14 +241,10 @@ and dump all the columns of the cursor returned by the function.
 		grp, grpCtx := errgroup.WithContext(ctx)
 		for sheetNo := range queries {
 			qry, name := queries[sheetNo].Query, queries[sheetNo].Name
-			i := strings.IndexByte(qry, ':')
-			if i >= 0 {
-				name, qry = qry[:i], qry[i+1:]
-			}
 			if name == "" {
 				name = strconv.Itoa(sheetNo + 1)
 			}
-			rows, columns, qErr := doQuery(grpCtx, tx, qry, params, false, *flagSort)
+			rows, columns, qErr := doQuery(grpCtx, tx, qry, params, *flagCall, *flagSort)
 			if qErr != nil {
 				err = qErr
 				break
