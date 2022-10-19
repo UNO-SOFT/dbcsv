@@ -12,7 +12,7 @@ require (
 	github.com/peterbourgon/ff/v3 v3.0.0
 	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d // indirect
 	golang.org/x/net v0.0.0-20220630215102-69896b714898 // indirect
-	golang.org/x/sync v0.0.0-20220513210516-0976fa681c29
+	golang.org/x/sync v0.1.0
 	golang.org/x/text v0.3.7
 )
 

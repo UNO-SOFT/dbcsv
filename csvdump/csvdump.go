@@ -90,6 +90,21 @@ and dump all the columns of the cursor returned by the function.
 	if err != nil {
 		return err
 	}
+	dec := enc.Encoding.NewDecoder()
+	args := flag.Args()
+	if dec != nil {
+		for i, a := range args {
+			if args[i], err = dec.String(a); err != nil {
+				return fmt.Errorf("%q: %w", a, err)
+			}
+		}
+		for i, q := range flagSheets.Strings {
+			if flagSheets.Strings[i], err = dec.String(q); err != nil {
+				return fmt.Errorf("%q: %w", q, err)
+			}
+		}
+	}
+
 	dbcsv.DateFormat = *flagDateFormat
 	dbcsv.DateEnd = `"` + strings.NewReplacer(
 		"2006", "9999",
@@ -100,29 +115,42 @@ and dump all the columns of the cursor returned by the function.
 		"05", "59",
 	).Replace(dbcsv.DateFormat) + `"`
 
-	var queries []string
+	type Query struct {
+		Query, Name string
+	}
+
+	var queries []Query
 	var params []interface{}
+	logger.Info("flags", "sheets", flagSheets.Strings, "call", *flagCall)
 	if len(flagSheets.Strings) != 0 {
-		queries = flagSheets.Strings
-	} else if *flagCall {
-		var buf strings.Builder
-		fmt.Fprintf(&buf, `BEGIN :1 := %s(`, flag.Arg(0))
-		params = make([]interface{}, flag.NArg()-1)
-		for i, x := range flag.Args()[1:] {
-			arg := strings.SplitN(x, "=", 2)
-			params[i] = ""
-			if len(arg) > 1 {
-				params[i] = arg[1]
+		queries = make([]Query, len(flagSheets.Strings))
+		for i, q := range flagSheets.Strings {
+			if j := strings.IndexByte(q, ':'); j > 0 {
+				queries[i] = Query{Name: q[:j], Query: q[j+1:]}
+			} else {
+				queries[i] = Query{Query: q}
 			}
-			if i != 0 {
-				buf.WriteString(", ")
-			}
-			fmt.Fprintf(&buf, "%s=>:%d", arg[0], i+2)
 		}
-		buf.WriteString("); END;")
-		qry := buf.String()
+		if *flagCall {
+			Q := queries[0]
+			Q.Query, params = splitParamArgs(Q.Query, args)
+			queries[0] = Q
+			if i := strings.Index(Q.Query, ":1 := "); i >= 0 {
+				prefix, suffix := Q.Query[:i+6], Q.Query[i+6:]
+				if i = strings.IndexByte(suffix, '('); i >= 0 {
+					suffix = suffix[i:]
+					for i, Q := range queries[1:] {
+						queries[i+1].Query = prefix + Q.Query + suffix
+					}
+				}
+			}
+			logger.Info("call", "queries", queries, "params", params)
+		}
+	} else if *flagCall {
+		var qry string
+		qry, params = splitParamArgs(args[0], args[1:])
 		logger.Info("call", qry, "params", params)
-		queries = append(queries, qry)
+		queries = append(queries, Query{Query: qry})
 	} else {
 		params = make([]interface{}, len(flagParams.Strings))
 		for i, p := range flagParams.Strings {
@@ -132,14 +160,14 @@ and dump all the columns of the cursor returned by the function.
 			where   string
 			columns []string
 		)
-		if flag.NArg() > 1 {
-			where = flag.Arg(1)
-			if flag.NArg() > 2 {
-				columns = flag.Args()[2:]
+		if len(args) > 1 {
+			where = args[1]
+			if len(args) > 2 {
+				columns = args[2:]
 			}
 		}
-		qry := getQuery(flag.Arg(0), where, columns, dbcsv.DefaultEncoding)
-		queries = append(queries, qry)
+		qry := getQuery(args[0], where, columns, dbcsv.DefaultEncoding)
+		queries = append(queries, Query{Query: qry})
 	}
 	db, err := sql.Open("godror", *flagConnect)
 	if err != nil {
@@ -192,7 +220,7 @@ and dump all the columns of the cursor returned by the function.
 		w := encoding.ReplaceUnsupported(enc.NewEncoder()).Writer(wfh)
 		logger.V(1).Info("encoding", "env", dbcsv.DefaultEncoding.Name)
 
-		rows, columns, qErr := doQuery(ctx, tx, queries[0], params, *flagCall, *flagSort)
+		rows, columns, qErr := doQuery(ctx, tx, queries[0].Query, params, *flagCall, *flagSort)
 		if qErr != nil {
 			err = qErr
 		} else {
@@ -210,14 +238,9 @@ and dump all the columns of the cursor returned by the function.
 			}
 		}
 		defer w.Close()
-		dec := enc.Encoding.NewDecoder()
 		grp, grpCtx := errgroup.WithContext(ctx)
 		for sheetNo := range queries {
-			qry := queries[sheetNo]
-			if qry, err = dec.String(qry); err != nil {
-				return fmt.Errorf("%q: %w", queries[sheetNo], err)
-			}
-			var name string
+			qry, name := queries[sheetNo].Query, queries[sheetNo].Name
 			i := strings.IndexByte(qry, ':')
 			if i >= 0 {
 				name, qry = qry[:i], qry[i+1:]
@@ -225,7 +248,7 @@ and dump all the columns of the cursor returned by the function.
 			if name == "" {
 				name = strconv.Itoa(sheetNo + 1)
 			}
-			rows, columns, qErr := doQuery(grpCtx, tx, qry, nil, false, *flagSort)
+			rows, columns, qErr := doQuery(grpCtx, tx, qry, params, false, *flagSort)
 			if qErr != nil {
 				err = qErr
 				break
@@ -403,6 +426,27 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 		return nil, nil, err
 	}
 	return rows, columns, nil
+}
+
+func splitParamArgs(fun string, args []string) (plsql string, params []interface{}) {
+	params = make([]interface{}, len(args))
+	var buf strings.Builder
+	buf.WriteString("BEGIN :1 := ")
+	buf.WriteString(fun)
+	buf.WriteByte('(')
+	for i, x := range args {
+		var key string
+		key, params[i], _ = strings.Cut(x, "=")
+		if i != 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString(key)
+		buf.WriteString("=>:")
+		buf.WriteString(strconv.Itoa(i + 2))
+	}
+	buf.WriteString("); END;")
+	logger.Info("splitParamArgs", "fun", fun, "args", args, "qry", buf.String(), "params", params)
+	return buf.String(), params
 }
 
 // vim: se noet fileencoding=utf-8:
