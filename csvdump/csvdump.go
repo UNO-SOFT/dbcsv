@@ -425,11 +425,14 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 }
 
 func splitParamArgs(fun string, args []string) (plsql string, params []interface{}) {
+	haveParens := strings.Contains(fun, "(") && strings.Contains(fun, ")")
 	params = make([]interface{}, len(args))
 	var buf strings.Builder
 	buf.WriteString("BEGIN :1 := ")
 	buf.WriteString(fun)
-	buf.WriteByte('(')
+	if !haveParens {
+		buf.WriteByte('(')
+	}
 	for i, x := range args {
 		var key string
 		key, params[i], _ = strings.Cut(x, "=")
@@ -440,7 +443,10 @@ func splitParamArgs(fun string, args []string) (plsql string, params []interface
 		buf.WriteString("=>:")
 		buf.WriteString(strconv.Itoa(i + 2))
 	}
-	buf.WriteString("); END;")
+	if !haveParens {
+		buf.WriteByte(')')
+	}
+	buf.WriteString("; END;")
 	logger.Info("splitParamArgs", "fun", fun, "args", args, "qry", buf.String(), "params", params)
 	return buf.String(), params
 }
