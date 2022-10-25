@@ -121,7 +121,7 @@ and dump all the columns of the cursor returned by the function.
 
 	var queries []Query
 	var params []interface{}
-	logger.Info("flags", "sheets", flagSheets.Strings, "call", *flagCall)
+	logger.V(1).Info("flags", "sheets", flagSheets.Strings, "call", *flagCall, "args", args)
 	if len(flagSheets.Strings) != 0 {
 		queries = make([]Query, len(flagSheets.Strings))
 		for i, q := range flagSheets.Strings {
@@ -149,7 +149,7 @@ and dump all the columns of the cursor returned by the function.
 	} else if *flagCall {
 		var qry string
 		qry, params = splitParamArgs(args[0], args[1:])
-		logger.Info("call", qry, "params", params)
+		logger.V(1).Info("call", qry, "params", params)
 		queries = append(queries, Query{Query: qry})
 	} else {
 		params = make([]interface{}, len(flagParams.Strings))
@@ -157,16 +157,19 @@ and dump all the columns of the cursor returned by the function.
 			params[i] = p
 		}
 		var (
-			where   string
-			columns []string
+			qry, where string
+			columns    []string
 		)
+		if len(args) > 0 {
+			qry = args[0]
+		}
 		if len(args) > 1 {
 			where = args[1]
 			if len(args) > 2 {
 				columns = args[2:]
 			}
 		}
-		qry := getQuery(args[0], where, columns, dbcsv.DefaultEncoding)
+		qry = getQuery(qry, where, columns, dbcsv.DefaultEncoding)
 		queries = append(queries, Query{Query: qry})
 	}
 	db, err := sql.Open("godror", *flagConnect)
@@ -292,7 +295,7 @@ and dump all the columns of the cursor returned by the function.
 }
 
 func getQuery(table, where string, columns []string, enc encoding.Encoding) string {
-	if table == "" && where == "" && len(columns) == 0 {
+	if (table == "" || table == "-") && where == "" && len(columns) == 0 {
 		if enc == nil {
 			enc = encoding.Nop
 		}
