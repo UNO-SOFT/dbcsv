@@ -135,14 +135,8 @@ and dump all the columns of the cursor returned by the function.
 			Q := queries[0]
 			Q.Query, params = splitParamArgs(Q.Query, args)
 			queries[0] = Q
-			if i := strings.Index(Q.Query, ":1 := "); i >= 0 {
-				prefix, suffix := Q.Query[:i+6], Q.Query[i+6:]
-				if i = strings.IndexByte(suffix, '('); i >= 0 {
-					suffix = suffix[i:]
-					for i, Q := range queries[1:] {
-						queries[i+1].Query = prefix + Q.Query + suffix
-					}
-				}
+			for i, Q := range queries[1:] {
+				queries[i+1].Query, _ = splitParamArgs(Q.Query, args)
 			}
 			logger.Info("call", "queries", queries, "params", params)
 		}
