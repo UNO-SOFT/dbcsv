@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/UNO-SOFT/dbcsv"
-	"github.com/UNO-SOFT/zlog"
+	"github.com/UNO-SOFT/zlog/v2"
 	"golang.org/x/text/encoding/htmlindex"
 	"golang.org/x/text/transform"
 
@@ -32,7 +32,7 @@ var (
 	stdout = io.Writer(os.Stdout)
 	stderr = io.Writer(os.Stderr)
 
-	logger = zlog.New(zlog.MaybeConsoleWriter(os.Stderr))
+	logger = zlog.New(os.Stderr)
 )
 
 func main() {

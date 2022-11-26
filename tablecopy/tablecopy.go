@@ -13,20 +13,23 @@ import (
 	"database/sql/driver"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"reflect"
 	"strings"
 	"time"
 
+	"github.com/UNO-SOFT/zlog/v2"
 	godror "github.com/godror/godror"
 
 	"golang.org/x/sync/errgroup"
 )
 
+var logger = zlog.New(os.Stderr)
+
 func main() {
 	if err := Main(); err != nil {
-		log.Fatalf("%+v", err)
+		logger.Error(err, "Main")
+		os.Exit(1)
 	}
 }
 
@@ -77,21 +80,8 @@ will execute a "SELECT * FROM Source_table@source_db WHERE F_ield=1" and an "INS
 
 	var Log func(...interface{}) error
 	if *flagVerbose {
-		Log = func(keyvals ...interface{}) error {
-			if len(keyvals)%2 != 0 {
-				keyvals = append(keyvals, "")
-			}
-			vv := make([]interface{}, len(keyvals)/2)
-			for i := range vv {
-				v := fmt.Sprintf("%+v", keyvals[(i<<1)+1])
-				if strings.Contains(v, " ") {
-					v = `"` + v + `"`
-				}
-				vv[i] = fmt.Sprintf("%s=%s", keyvals[(i<<1)], v)
-			}
-			log.Println(vv...)
-			return nil
-		}
+		zlog.SetLevel(logger, zlog.TraceLevel)
+		Log = logger.Log
 	}
 	var replace map[string]string
 	if *flagReplace != "" {
@@ -186,7 +176,7 @@ will execute a "SELECT * FROM Source_table@source_db WHERE F_ield=1" and an "INS
 	concLimit := make(chan struct{}, *flagConc)
 	srcTx, err := srcDB.BeginTx(subCtx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
-		log.Printf("[WARN] Read-Only transaction: %v", err)
+		logger.Error(err, "[WARN] Read-Only transaction")
 		if srcTx, err = srcDB.BeginTx(subCtx, nil); err != nil {
 			return fmt.Errorf("%s: %w", "beginTx", err)
 		}
@@ -215,9 +205,7 @@ will execute a "SELECT * FROM Source_table@source_db WHERE F_ield=1" and an "INS
 				}
 			}
 			if task.Truncate {
-				if Log != nil {
-					_ = Log("msg", "TRUNCATE", "table", task.Dst)
-				}
+				logger.Info("TRUNCATE", "table", task.Dst)
 				// nosemgrep: go.lang.security.audit.database.string-formatted-query.string-formatted-query
 				if _, err := dstDB.ExecContext(subCtx, "TRUNCATE TABLE "+task.Dst); err != nil {
 					// nosemgrep: go.lang.security.audit.database.string-formatted-query.string-formatted-query
@@ -245,7 +233,7 @@ will execute a "SELECT * FROM Source_table@source_db WHERE F_ield=1" and an "INS
 			n, err := One(oneCtx, dstTx, srcTx, task, *flagBatchSize, Log)
 			oneCancel()
 			dur := time.Since(start)
-			log.Println(task.Src, n, dur)
+			logger.Info("one", "src", task.Src, "n", n, "dur", dur.String())
 			return err
 		})
 	}
@@ -262,7 +250,7 @@ type copyTask struct {
 }
 
 func One(ctx context.Context, dstTx, srcTx *sql.Tx, task copyTask, batchSize int, Log func(...interface{}) error) (int64, error) {
-	_ = Log("msg", "One", "task", task)
+	logger.Info("One", "task", task)
 	if task.Dst == "" {
 		task.Dst = task.Src
 	}
@@ -323,10 +311,7 @@ func One(ctx context.Context, dstTx, srcTx *sql.Tx, task copyTask, batchSize int
 		return n, fmt.Errorf("%s: %w", dstQry, err)
 	}
 	defer stmt.Close()
-	if Log != nil {
-		_ = Log("src", srcQry)
-		_ = Log("dst", dstQry)
-	}
+	logger.Info("qry", "src", srcQry, "dst", dstQry)
 
 	if batchSize < 1 {
 		batchSize = DefaultBatchSize

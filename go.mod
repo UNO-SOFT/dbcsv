@@ -17,7 +17,7 @@ require (
 )
 
 require (
-	github.com/UNO-SOFT/zlog v0.0.1
+	github.com/UNO-SOFT/zlog v0.1.1
 	github.com/go-logr/logr v1.2.3
 	github.com/google/go-cmp v0.5.8
 	github.com/rs/zerolog v1.28.0
@@ -37,7 +37,8 @@ require (
 	github.com/valyala/quicktemplate v1.7.0 // indirect
 	github.com/xuri/efp v0.0.0-20220603152613-6918739fd470 // indirect
 	github.com/xuri/nfp v0.0.0-20220409054826-5e722a1d9e22 // indirect
-	golang.org/x/sys v0.0.0-20220702020025-31831981b65f // indirect
+	golang.org/x/exp v0.0.0-20221114191408-850992195362 // indirect
+	golang.org/x/sys v0.1.0 // indirect
 	golang.org/x/term v0.0.0-20220919170432-7a66f970e087 // indirect
 	google.golang.org/protobuf v1.27.1 // indirect
 )

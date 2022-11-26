@@ -27,16 +27,14 @@ import (
 	"github.com/UNO-SOFT/spreadsheet"
 	"github.com/UNO-SOFT/spreadsheet/ods"
 	"github.com/UNO-SOFT/spreadsheet/xlsx"
-	"github.com/go-logr/logr"
 	"github.com/godror/godror"
 	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/compress/zstd"
-	"github.com/rs/zerolog"
 
-	"github.com/UNO-SOFT/zlog"
+	"github.com/UNO-SOFT/zlog/v2"
 )
 
-var logger = zlog.New(zlog.MaybeConsoleWriter(os.Stderr))
+var logger = zlog.New(os.Stderr)
 
 func main() {
 	if err := Main(); err != nil {
@@ -83,7 +81,7 @@ and dump all the columns of the cursor returned by the function.
 	flag.Parse()
 
 	if *flagVerbose {
-		zlog.SetLevel(logger, zerolog.TraceLevel)
+		zlog.SetLevel(logger, zlog.TraceLevel)
 	}
 
 	enc, err := dbcsv.EncFromName(*flagEnc)
@@ -175,7 +173,7 @@ and dump all the columns of the cursor returned by the function.
 	db.SetMaxIdleConns(1)
 	ctx, cancel := context.WithTimeout(context.Background(), *flagTimeout)
 	defer cancel()
-	ctx = logr.NewContext(ctx, logger)
+	ctx = zlog.NewContext(ctx, logger)
 	ctx, cancel = dbcsv.Wrap(ctx)
 	defer cancel()
 

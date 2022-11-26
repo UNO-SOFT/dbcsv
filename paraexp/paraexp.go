@@ -14,7 +14,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -25,14 +24,18 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/UNO-SOFT/dbcsv"
+	"github.com/UNO-SOFT/zlog/v2"
 	"github.com/godror/godror"
 )
 
 const DefaultFetchRowCount = 8
 
+var logger = zlog.New(os.Stderr)
+
 func main() {
 	if err := Main(); err != nil {
-		log.Fatalf("%+v", err)
+		logger.Error(err, "Main")
+		os.Exit(1)
 	}
 }
 
@@ -63,23 +66,8 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 	}
 	flag.Parse()
 
-	Log := func(...interface{}) error { return nil }
 	if *flagVerbose {
-		Log = func(keyvals ...interface{}) error {
-			if len(keyvals)%2 != 0 {
-				keyvals = append(keyvals, "")
-			}
-			vv := make([]interface{}, len(keyvals)/2)
-			for i := range vv {
-				v := fmt.Sprintf("%+v", keyvals[(i<<1)+1])
-				if strings.Contains(v, " ") {
-					v = `"` + v + `"`
-				}
-				vv[i] = fmt.Sprintf("%s=%s", keyvals[(i<<1)], v)
-			}
-			log.Println(vv...)
-			return nil
-		}
+		zlog.SetLevel(logger, zlog.TraceLevel)
 	}
 
 	envEnc, err := dbcsv.EncFromName(*flagEnc)
@@ -128,7 +116,7 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 	bw := bufio.NewWriter(fh)
 	defer bw.Flush()
 
-	_ = Log("msg", "writing", "file", fh.Name())
+	logger.Info("writing", "file", fh.Name())
 
 	if _, err := bw.WriteString("[\n"); err != nil {
 		return err

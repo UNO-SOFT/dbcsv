@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
-	"log"
 	"os"
 	"reflect"
 	"runtime"
@@ -28,7 +27,7 @@ import (
 	"unicode"
 
 	"github.com/UNO-SOFT/dbcsv"
-	"github.com/UNO-SOFT/zlog"
+	"github.com/UNO-SOFT/zlog/v2"
 
 	"github.com/peterbourgon/ff/v3/ffcli"
 	"golang.org/x/sync/errgroup"
@@ -36,7 +35,7 @@ import (
 	"github.com/godror/godror"
 )
 
-var logger = zlog.New(zlog.MaybeConsoleWriter(os.Stderr))
+var logger = zlog.New(os.Stderr)
 
 func main() {
 	if err := Main(); err != nil {
@@ -620,7 +619,7 @@ func tableSplitOwner(tbl string) (string, string) {
 	if tbl == "" {
 		panic("empty tabl name")
 	}
-	log.Printf("tableSplitOwner(%q)", tbl)
+	logger.V(1).Info("tableSplitOwner", "tbl", tbl)
 	if i := strings.IndexByte(tbl, '.'); i >= 0 {
 		return tbl[:i], tbl[i+1:]
 	}
@@ -723,7 +722,7 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
 			buf.WriteString(tablespace)
 		}
 		qry = buf.String()
-		log.Println(qry)
+		logger.Info("qry", qry)
 		if _, err := db.Exec(qry); err != nil {
 			return cols, fmt.Errorf("%s: %w", qry, err)
 		}
@@ -942,7 +941,7 @@ func filterCols(cols []Column, fields []string) []Column {
 		} else if i, ok = m[mkColName(f)]; ok {
 			columns = append(columns, cols[i])
 		} else {
-			log.Printf("filter out %q (%q)", f, mkColName(f))
+			logger.Info("filter out", "field", f, "col", mkColName(f))
 		}
 	}
 	return columns
