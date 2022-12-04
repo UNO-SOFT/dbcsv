@@ -35,6 +35,8 @@ github.com/UNO-SOFT/zlog v0.1.0 h1:ExOzuKiKVIHAV655piOKb3wilsjzVHfuREGbItepgjo=
 github.com/UNO-SOFT/zlog v0.1.0/go.mod h1:5q9ryph+13lCJuvdNRFpY1mp3RMS02vBcQ/PcdpCbds=
 github.com/UNO-SOFT/zlog v0.1.1 h1:PwRqLnklTPgObOi6QcExxh0oc+PSTbTILhYLJsmF30M=
 github.com/UNO-SOFT/zlog v0.1.1/go.mod h1:5q9ryph+13lCJuvdNRFpY1mp3RMS02vBcQ/PcdpCbds=
+github.com/UNO-SOFT/zlog v0.1.2 h1:LNOR3B+ZmpSd0iv68okyYh9zLkDklgsEogCNO3YdzB4=
+github.com/UNO-SOFT/zlog v0.1.2/go.mod h1:zSWgB5KnfauhG7TDkwrLLy/92FRW6PbjWOKgoXm8fAI=
 github.com/VividCortex/gohistogram v1.0.0/go.mod h1:Pf5mBqqDxYaXu3hDrrU+w6nw50o/4+TcAqDqk/vUH7g=
 github.com/afex/hystrix-go v0.0.0-20180502004556-fa1af6a1f4f5/go.mod h1:SkGFH1ia65gfNATL8TAiHDNxPzPdmEL5uirI2Uyuz6c=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
@@ -564,6 +566,7 @@ golang.org/x/exp v0.0.0-20200207192155-f17229e696bd/go.mod h1:J/WKrq2StrnmMY6+EH
 golang.org/x/exp v0.0.0-20220613132600-b0d781184e0d/go.mod h1:Kr81I6Kryrl9sr8s2FK3vxD90NdsKWRuOIl2O4CvYbA=
 golang.org/x/exp v0.0.0-20221114191408-850992195362 h1:NoHlPRbyl1VFI6FjwHtPQCN7wAMXI6cKcqrmXhOOfBQ=
 golang.org/x/exp v0.0.0-20221114191408-850992195362/go.mod h1:CxIveKay+FTh1D0yPZemJVgC/95VzuuOLq5Qi4xnoYc=
+golang.org/x/exp v0.0.0-20221126150942-6ab00d035af9/go.mod h1:CxIveKay+FTh1D0yPZemJVgC/95VzuuOLq5Qi4xnoYc=
 golang.org/x/image v0.0.0-20190227222117-0694c2d4d067/go.mod h1:kZ7UVZpmo3dzQBMxlp+ypCbDeSB+sBbTgSJuh5dn5js=
 golang.org/x/image v0.0.0-20190507092727-e4e5bf290fec/go.mod h1:kZ7UVZpmo3dzQBMxlp+ypCbDeSB+sBbTgSJuh5dn5js=
 golang.org/x/image v0.0.0-20190523035834-f03afa92d3ff/go.mod h1:kZ7UVZpmo3dzQBMxlp+ypCbDeSB+sBbTgSJuh5dn5js=
