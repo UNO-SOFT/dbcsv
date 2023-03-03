@@ -291,8 +291,8 @@ and dump all the columns of the cursor returned by the function.
 		}
 	}
 	var closeErr error
-	if pfh, ok := fh.(interface{ CloseAndAtomicallyReplace() error }); ok {
-		closeErr = pfh.CloseAndAtomicallyReplace()
+	if pfh, ok := fh.(interface{ CloseAtomicallyReplace() error }); ok {
+		closeErr = pfh.CloseAtomicallyReplace()
 	} else {
 		closeErr = fh.Close()
 	}
