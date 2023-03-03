@@ -3,7 +3,7 @@ module github.com/UNO-SOFT/dbcsv
 go 1.17
 
 require (
-	github.com/UNO-SOFT/spreadsheet v0.1.2
+	github.com/UNO-SOFT/spreadsheet v0.1.4
 	github.com/extrame/goyymmdd v0.0.0-20210114090516-7cc815f00d1a // indirect
 	github.com/extrame/ole2 v0.0.0-20160812065207-d69429661ad7 // indirect
 	github.com/extrame/xls v0.0.2-0.20180905092746-539786826ced
@@ -13,13 +13,14 @@ require (
 	golang.org/x/crypto v0.5.0 // indirect
 	golang.org/x/net v0.5.0 // indirect
 	golang.org/x/sync v0.1.0
-	golang.org/x/text v0.6.0
+	golang.org/x/text v0.7.0
 )
 
 require (
 	github.com/UNO-SOFT/zlog v0.2.4
 	github.com/go-logr/logr v1.2.3
 	github.com/google/go-cmp v0.5.9
+	github.com/google/renameio/v2 v2.0.0
 	github.com/xuri/excelize/v2 v2.7.0
 )
 

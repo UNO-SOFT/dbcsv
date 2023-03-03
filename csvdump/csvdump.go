@@ -1,4 +1,4 @@
-// Copyright 2020, 2022 Tamás Gulácsi.
+// Copyright 2020, 2023 Tamás Gulácsi.
 //
 //
 // SPDX-License-Identifier: UPL-1.0 OR Apache-2.0
@@ -23,13 +23,16 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/text/encoding"
 
+	"github.com/google/renameio/v2"
+	"github.com/klauspost/compress/gzip"
+	"github.com/klauspost/compress/zstd"
+
+	"github.com/godror/godror"
+
 	"github.com/UNO-SOFT/dbcsv"
 	"github.com/UNO-SOFT/spreadsheet"
 	"github.com/UNO-SOFT/spreadsheet/ods"
 	"github.com/UNO-SOFT/spreadsheet/xlsx"
-	"github.com/godror/godror"
-	"github.com/klauspost/compress/gzip"
-	"github.com/klauspost/compress/zstd"
 
 	"github.com/UNO-SOFT/zlog/v2"
 )
@@ -171,21 +174,28 @@ and dump all the columns of the cursor returned by the function.
 	defer db.Close()
 	db.SetMaxOpenConns(2)
 	db.SetMaxIdleConns(1)
+
 	ctx, cancel := context.WithTimeout(context.Background(), *flagTimeout)
 	defer cancel()
 	ctx = zlog.NewContext(ctx, logger)
 	ctx, cancel = dbcsv.Wrap(ctx)
 	defer cancel()
 
-	fh := os.Stdout
+	fh := interface {
+		io.WriteCloser
+		Name() string
+	}(os.Stdout)
+	defer fh.Close()
 	if !(*flagOut == "" || *flagOut == "-") {
 		// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
 		_ = os.MkdirAll(filepath.Dir(*flagOut), 0750)
-		if fh, err = os.Create(*flagOut); err != nil {
+		pfh, err := renameio.NewPendingFile(*flagOut)
+		if err != nil {
 			return fmt.Errorf("%s: %w", *flagOut, err)
 		}
+		defer pfh.Cleanup()
+		fh = pfh
 	}
-	defer fh.Close()
 	wfh := io.WriteCloser(fh)
 	if *flagCompress != "" {
 		switch (strings.TrimSpace(strings.ToLower(*flagCompress)) + "  ")[:2] {
@@ -280,7 +290,13 @@ and dump all the columns of the cursor returned by the function.
 			err = closeErr
 		}
 	}
-	if closeErr := fh.Close(); closeErr != nil && err == nil {
+	var closeErr error
+	if pfh, ok := fh.(interface{ CloseAndAtomicallyReplace() error }); ok {
+		closeErr = pfh.CloseAndAtomicallyReplace()
+	} else {
+		closeErr = fh.Close()
+	}
+	if closeErr != nil && err == nil {
 		err = closeErr
 	}
 	return err
