@@ -15,10 +15,10 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/text/encoding"
@@ -62,7 +62,7 @@ func Main() error {
 	flagVerbose := flag.Bool("v", false, "verbose logging")
 	flagCompress := flag.String("compress", "", "compress output with gz/gzip or zst/zstd/zstandard")
 	flagCall := flag.Bool("call", false, "the first argument is not the WHERE, but the PL/SQL block to be called, the followings are not the columns but the arguments")
-	flagTimeout := flag.Duration("timeout", 15*time.Minute, "timeout")
+	flagTimeout := flag.Duration("timeout", 0, "timeout")
 
 	flag.Usage = func() {
 		fmt.Fprintln(flag.CommandLine.Output(), strings.Replace(`Usage of {{.prog}}:
@@ -175,11 +175,13 @@ and dump all the columns of the cursor returned by the function.
 	db.SetMaxOpenConns(2)
 	db.SetMaxIdleConns(1)
 
-	ctx, cancel := context.WithTimeout(context.Background(), *flagTimeout)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
+	if *flagTimeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, *flagTimeout)
+		defer cancel()
+	}
 	ctx = zlog.NewContext(ctx, logger)
-	ctx, cancel = dbcsv.Wrap(ctx)
-	defer cancel()
 
 	fh := interface {
 		io.WriteCloser
