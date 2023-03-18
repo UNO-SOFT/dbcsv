@@ -37,7 +37,10 @@ import (
 	"github.com/UNO-SOFT/zlog/v2"
 )
 
-var logger = zlog.New(os.Stderr)
+var (
+	verbose zlog.VerboseVar
+	logger  = zlog.NewLogger(zlog.MaybeConsoleHandler(&verbose, os.Stderr))
+)
 
 func main() {
 	if err := Main(); err != nil {
@@ -59,7 +62,7 @@ func Main() error {
 	flag.Var(flagSheets, "sheet", "each -sheet=name:SELECT will become a separate sheet on the output ods")
 	flagParams := dbcsv.FlagStrings()
 	flag.Var(flagParams, "param", "each -param=asdf will becoma separate parameter (:1, :2, ...)")
-	flagVerbose := flag.Bool("v", false, "verbose logging")
+	flag.Var(&verbose, "v", "verbose logging")
 	flagCompress := flag.String("compress", "", "compress output with gz/gzip or zst/zstd/zstandard")
 	flagCall := flag.Bool("call", false, "the first argument is not the WHERE, but the PL/SQL block to be called, the followings are not the columns but the arguments")
 	flagTimeout := flag.Duration("timeout", 0, "timeout")
@@ -82,10 +85,6 @@ and dump all the columns of the cursor returned by the function.
 		*flagConnect = os.Getenv("BRUNO_ID")
 	}
 	flag.Parse()
-
-	if *flagVerbose {
-		zlog.SetLevel(logger, zlog.TraceLevel)
-	}
 
 	enc, err := dbcsv.EncFromName(*flagEnc)
 	if err != nil {

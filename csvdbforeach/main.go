@@ -32,7 +32,8 @@ var (
 	stdout = io.Writer(os.Stdout)
 	stderr = io.Writer(os.Stderr)
 
-	logger = zlog.New(os.Stderr)
+	verbose zlog.VerboseVar
+	logger  = zlog.NewLogger(zlog.MaybeConsoleHandler(&verbose, os.Stderr))
 )
 
 func main() {
@@ -69,7 +70,7 @@ func Main() error {
 	flag.StringVar(&cfg.Charset, "charset", "utf-8", "input charset")
 	flag.IntVar(&cfg.Skip, "skip", 1, "skip first N rows")
 	flag.StringVar(&cfg.ColumnsString, "columns", "", "column numbers to use, separated by comma, in param order, starts with 1")
-	//flagVerbose := flag.Bool("v", false, "verbose logging")
+	flag.Var(&verbose, "v", "verbose logging")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `%s
 

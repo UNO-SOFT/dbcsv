@@ -24,7 +24,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var logger = zlog.New(os.Stderr)
+var (
+	verbose zlog.VerboseVar
+	logger  = zlog.NewLogger(zlog.MaybeConsoleHandler(&verbose, os.Stderr))
+)
 
 func main() {
 	if err := Main(); err != nil {
@@ -41,7 +44,7 @@ func Main() error {
 	flagDest := flag.String("dst", os.Getenv("DB_ID"), "user/passw@sid to write to")
 	flagDestPrep := flag.String("dst-prep", "", "prepare destination connection (run statements separated by ;\\n)")
 	flagReplace := flag.String("replace", "", "replace FIELD_NAME=WITH_VALUE,OTHER=NEXT")
-	flagVerbose := flag.Bool("v", false, "verbose logging")
+	flag.Var(&verbose, "v", "verbose logging")
 	flagTimeout := flag.Duration("timeout", 1*time.Minute, "timeout")
 	flagTableTimeout := flag.Duration("table-timeout", 10*time.Second, "per-table-timeout")
 	flagConc := flag.Int("concurrency", 8, "concurrency")
@@ -79,8 +82,7 @@ will execute a "SELECT * FROM Source_table@source_db WHERE F_ield=1" and an "INS
 	}
 
 	var Log func(...interface{}) error
-	if *flagVerbose {
-		zlog.SetLevel(logger, zlog.TraceLevel)
+	if verbose {
 		Log = logger.Log
 	}
 	var replace map[string]string

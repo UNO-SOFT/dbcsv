@@ -30,7 +30,10 @@ import (
 
 const DefaultFetchRowCount = 8
 
-var logger = zlog.New(os.Stderr)
+var (
+	verbose zlog.VerboseVar
+	logger  = zlog.NewLogger(zlog.MaybeConsoleHandler(&verbose, os.Stderr))
+)
 
 func main() {
 	if err := Main(); err != nil {
@@ -47,7 +50,7 @@ func Main() error {
 	flagOut := flag.String("o", "-", "output (defaults to stdout)")
 	flagValues := dbcsv.FlagStrings()
 	flag.Var(flagValues, "value", "each -value=name:value will be bond on each query")
-	flagVerbose := flag.Bool("v", false, "verbose logging")
+	flag.Var(&verbose, "v", "verbose logging")
 
 	flag.Usage = func() {
 		fmt.Fprintln(flag.CommandLine.Output(), strings.Replace(`Usage of {{.prog}}:
@@ -65,10 +68,6 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 		*flagConnect = os.Getenv("BRUNO_ID")
 	}
 	flag.Parse()
-
-	if *flagVerbose {
-		zlog.SetLevel(logger, zlog.TraceLevel)
-	}
 
 	envEnc, err := dbcsv.EncFromName(*flagEnc)
 	if err != nil {

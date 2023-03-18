@@ -35,7 +35,10 @@ import (
 	"github.com/godror/godror"
 )
 
-var logger = zlog.New(os.Stderr)
+var (
+	verbose zlog.VerboseVar
+	logger  = zlog.NewLogger(zlog.MaybeConsoleHandler(&verbose, os.Stderr))
+)
 
 func main() {
 	if err := Main(); err != nil {
@@ -79,6 +82,7 @@ func Main() error {
 	fs.BoolVar(&cfg.JustPrint, "just-print", false, "just print the INSERTs")
 	fs.StringVar(&cfg.Copy, "copy", "", "copy this table's structure")
 	fs.IntVar(&cfg.ChunkSize, "chunk-size", defaultChunkSize, "chunk size - number of rows inserted at once")
+	fs.Var(&verbose, "v", "verbose logging")
 	if *flagConnect == "" {
 		*flagConnect = os.Getenv("BRUNO_ID")
 	}
