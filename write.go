@@ -103,12 +103,16 @@ func DumpSheet(ctx context.Context, sheet spreadsheet.Sheet, rows *sql.Rows, col
 	}
 	start := time.Now()
 	n := 0
+	dbg := logger.V(1)
 	for rows.Next() {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		if err := rows.Scan(dest...); err != nil {
 			return fmt.Errorf("scan into %#v: %w", dest, err)
+		}
+		if dbg.Enabled() {
+			dbg.Info("scan", "rows", dest, "vals", fmt.Sprintf("%#v", vals))
 		}
 		if err := sheet.AppendRow(vals...); err != nil {
 			return err
@@ -123,47 +127,72 @@ func DumpSheet(ctx context.Context, sheet spreadsheet.Sheet, rows *sql.Rows, col
 
 type Column struct {
 	reflect.Type
-	Name string
+	Name, DatabaseType string
+	Precision, Scale   int
 }
 
 func (col Column) Converter(sep string) Stringer {
-	return getColConverter(col.Type, sep)
+	switch col.Type.Kind() {
+	case reflect.Float32, reflect.Float64:
+		return &ValFloat{}
+	case reflect.Int32, reflect.Int64, reflect.Int:
+		return &ValInt{}
+	case reflect.String:
+		if col.DatabaseType == "NUMBER" {
+			if col.Scale == 0 && col.Precision <= 19 {
+				return &ValInt{}
+			}
+			return &ValFloat{}
+		}
+		return &ValString{Sep: sep}
+	}
+
+	switch col.Type {
+	case typeOfByteSlice:
+		return &ValBytes{Sep: sep}
+	case typeOfTime, typeOfNullTime:
+		return &ValTime{Quote: sep != "" && strings.Contains(DateFormat, sep)}
+	}
+	return &ValString{Sep: sep}
 }
 
 type Stringer interface {
 	String() string
 	Pointer() interface{}
-	Scan(interface{}) error
+	sql.Scanner
+	driver.Valuer
 }
 
 type ValString struct {
 	Sep   string
-	Value sql.NullString
+	value sql.NullString
 }
 
-func (v ValString) String() string            { return csvQuoteString(v.Sep, v.Value.String) }
-func (v ValString) StringRaw() string         { return v.Value.String }
-func (v *ValString) Pointer() interface{}     { return &v.Value }
-func (v *ValString) Scan(x interface{}) error { return v.Value.Scan(x) }
+func (v ValString) Value() (driver.Value, error) { return v.value, nil }
+func (v ValString) String() string               { return csvQuoteString(v.Sep, v.value.String) }
+func (v ValString) StringRaw() string            { return v.value.String }
+func (v *ValString) Pointer() interface{}        { return &v.value }
+func (v *ValString) Scan(x interface{}) error    { return v.value.Scan(x) }
 
 type ValBytes struct {
 	Sep   string
-	Value []byte
+	value []byte
 }
 
-func (v ValBytes) String() string        { return csvQuoteString(v.Sep, fmt.Sprintf("%x", v.Value)) }
-func (v ValBytes) StringRaw() string     { return fmt.Sprintf("%x", v.Value) }
-func (v *ValBytes) Pointer() interface{} { return &v.Value }
+func (v ValBytes) Value() (driver.Value, error) { return v.value, nil }
+func (v ValBytes) String() string               { return csvQuoteString(v.Sep, fmt.Sprintf("%x", v.value)) }
+func (v ValBytes) StringRaw() string            { return fmt.Sprintf("%x", v.value) }
+func (v *ValBytes) Pointer() interface{}        { return &v.value }
 func (v *ValBytes) Scan(x interface{}) error {
 	if x == nil {
-		v.Value = nil
+		v.value = nil
 		return nil
 	}
 	switch x := x.(type) {
 	case []byte:
-		v.Value = x
+		v.value = x
 	case string:
-		v.Value = []byte(x)
+		v.value = []byte(x)
 	default:
 		return fmt.Errorf("unknown scan source %T", x)
 	}
@@ -171,33 +200,35 @@ func (v *ValBytes) Scan(x interface{}) error {
 }
 
 type ValInt struct {
-	Value sql.NullInt64
+	value sql.NullInt64
 }
 
+func (v ValInt) Value() (driver.Value, error) { return v.value, nil }
 func (v ValInt) String() string {
-	if v.Value.Valid {
-		return strconv.FormatInt(v.Value.Int64, 10)
+	if v.value.Valid {
+		return strconv.FormatInt(v.value.Int64, 10)
 	}
 	return ""
 }
-func (v *ValInt) Pointer() interface{}     { return &v.Value }
-func (v *ValInt) Scan(x interface{}) error { return v.Value.Scan(x) }
+func (v *ValInt) Pointer() interface{}     { return &v.value }
+func (v *ValInt) Scan(x interface{}) error { return v.value.Scan(x) }
 
 type ValFloat struct {
-	Value sql.NullFloat64
+	value sql.NullFloat64
 }
 
+func (v ValFloat) Value() (driver.Value, error) { return v.value, nil }
 func (v ValFloat) String() string {
-	if v.Value.Valid {
-		return strconv.FormatFloat(v.Value.Float64, 'f', -1, 64)
+	if v.value.Valid {
+		return strconv.FormatFloat(v.value.Float64, 'f', -1, 64)
 	}
 	return ""
 }
-func (v *ValFloat) Pointer() interface{}     { return &v.Value }
-func (v *ValFloat) Scan(x interface{}) error { return v.Value.Scan(x) }
+func (v *ValFloat) Pointer() interface{}     { return &v.value }
+func (v *ValFloat) Scan(x interface{}) error { return v.value.Scan(x) }
 
 type ValTime struct {
-	Value sql.NullTime
+	value sql.NullTime
 	Quote bool
 }
 
@@ -206,50 +237,39 @@ var (
 	DateFormat = "2006-01-02"
 )
 
+func (v ValTime) Value() (driver.Value, error) { return v.value, nil }
 func (v ValTime) String() string {
-	if !v.Value.Valid || v.Value.Time.IsZero() {
+	if !v.value.Valid || v.value.Time.IsZero() {
 		return ""
 	}
-	if v.Value.Time.Year() < 0 {
+	if v.value.Time.Year() < 0 {
 		return DateEnd
 	}
 	if v.Quote {
-		return `"` + v.Value.Time.Format(DateFormat) + `"`
+		return `"` + v.value.Time.Format(DateFormat) + `"`
 	}
-	return v.Value.Time.Format(DateFormat)
+	return v.value.Time.Format(DateFormat)
 }
 func (v ValTime) StringRaw() string {
-	if !v.Value.Valid || v.Value.Time.IsZero() {
+	if !v.value.Valid || v.value.Time.IsZero() {
 		return ""
 	}
-	if v.Value.Time.Year() < 0 {
+	if v.value.Time.Year() < 0 {
 		return DateEnd
 	}
-	return v.Value.Time.Format(DateFormat)
+	return v.value.Time.Format(DateFormat)
 }
 
-func (vt ValTime) ConvertValue(v interface{}) (driver.Value, error) {
-	if v == nil {
-		return sql.NullTime{}, nil
-	}
-	switch v := v.(type) {
-	case sql.NullTime:
-		return v, nil
-	case time.Time:
-		return sql.NullTime{Valid: !v.IsZero(), Time: v}, nil
-	}
-	return nil, fmt.Errorf("unknown value %T", v)
-}
 func (vt *ValTime) Scan(v interface{}) error {
 	if v == nil {
-		vt.Value = sql.NullTime{}
+		vt.value = sql.NullTime{}
 		return nil
 	}
 	switch v := v.(type) {
 	case sql.NullTime:
-		vt.Value = v
+		vt.value = v
 	case time.Time:
-		vt.Value = sql.NullTime{Valid: !v.IsZero(), Time: v}
+		vt.value = sql.NullTime{Valid: !v.IsZero(), Time: v}
 	default:
 		return fmt.Errorf("unknown scan source %T", v)
 	}
@@ -258,24 +278,6 @@ func (vt *ValTime) Scan(v interface{}) error {
 func (v *ValTime) Pointer() interface{} { return v }
 
 var typeOfTime, typeOfNullTime, typeOfByteSlice = reflect.TypeOf(time.Time{}), reflect.TypeOf(sql.NullTime{}), reflect.TypeOf(([]byte)(nil))
-
-func getColConverter(typ reflect.Type, sep string) Stringer {
-	switch typ.Kind() {
-	case reflect.String:
-		return &ValString{Sep: sep}
-	case reflect.Float32, reflect.Float64:
-		return &ValFloat{}
-	case reflect.Int32, reflect.Int64, reflect.Int:
-		return &ValInt{}
-	}
-	switch typ {
-	case typeOfByteSlice:
-		return &ValBytes{Sep: sep}
-	case typeOfTime, typeOfNullTime:
-		return &ValTime{Quote: sep != "" && strings.Contains(DateFormat, sep)}
-	}
-	return &ValString{Sep: sep}
-}
 
 var bufPool = sync.Pool{New: func() interface{} { return bytes.NewBuffer(make([]byte, 0, 1024)) }}
 
@@ -310,7 +312,8 @@ func csvQuote(w io.Writer, sep, s string) (int, error) {
 	return n + m, err
 }
 
-func GetColumns(rows interface{}) ([]Column, error) {
+func GetColumns(ctx context.Context, rows interface{}) ([]Column, error) {
+	//logger := logr.FromContextOrDiscard(ctx)
 	if r, ok := rows.(*sql.Rows); ok {
 		types, err := r.ColumnTypes()
 		if err != nil {
@@ -318,18 +321,30 @@ func GetColumns(rows interface{}) ([]Column, error) {
 		}
 		cols := make([]Column, len(types))
 		for i, t := range types {
-			cols[i] = Column{Name: t.Name(), Type: t.ScanType()}
+			//logger.Debug("column", "i", i, "t", fmt.Sprintf("%#v", t))
+			precision, scale, _ := t.DecimalSize()
+			cols[i] = Column{
+				Name:         t.Name(),
+				DatabaseType: t.DatabaseTypeName(),
+				Type:         t.ScanType(),
+				Precision:    int(precision), Scale: int(scale),
+			}
 		}
 		return cols, nil
 	}
 
 	colNames := rows.(driver.Rows).Columns()
 	cols := make([]Column, len(colNames))
-	r := rows.(driver.RowsColumnTypeScanType)
+	st := rows.(driver.RowsColumnTypeScanType)
+	dtn := rows.(driver.RowsColumnTypeDatabaseTypeName)
+	ps := rows.(driver.RowsColumnTypePrecisionScale)
 	for i, name := range colNames {
+		precision, scale, _ := ps.ColumnTypePrecisionScale(i)
 		cols[i] = Column{
-			Name: name,
-			Type: r.ColumnTypeScanType(i),
+			Name:         name,
+			DatabaseType: dtn.ColumnTypeDatabaseTypeName(i),
+			Type:         st.ColumnTypeScanType(i),
+			Precision:    int(precision), Scale: int(scale),
 		}
 	}
 	return cols, nil

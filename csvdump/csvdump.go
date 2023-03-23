@@ -23,6 +23,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/text/encoding"
 
+	"github.com/go-logr/logr"
 	"github.com/google/renameio/v2"
 	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/compress/zstd"
@@ -121,7 +122,7 @@ and dump all the columns of the cursor returned by the function.
 
 	var queries []Query
 	var params []interface{}
-	logger.V(1).Info("flags", "sheets", flagSheets.Strings, "call", *flagCall, "args", args)
+	logger.Debug("flags", "sheets", flagSheets.Strings, "call", *flagCall, "args", args)
 	if len(flagSheets.Strings) != 0 {
 		queries = make([]Query, len(flagSheets.Strings))
 		for i, q := range flagSheets.Strings {
@@ -143,7 +144,7 @@ and dump all the columns of the cursor returned by the function.
 	} else if *flagCall {
 		var qry string
 		qry, params = splitParamArgs(args[0], args[1:])
-		logger.V(1).Info("call", qry, "params", params)
+		logger.Debug("call", qry, "params", params)
 		queries = append(queries, Query{Query: qry})
 	} else {
 		params = make([]interface{}, len(flagParams.Strings))
@@ -180,13 +181,14 @@ and dump all the columns of the cursor returned by the function.
 		ctx, cancel = context.WithTimeout(ctx, *flagTimeout)
 		defer cancel()
 	}
-	ctx = zlog.NewContext(ctx, logger)
+	ctx = logr.NewContext(zlog.NewContext(ctx, logger), logger.Logr())
 
 	fh := interface {
 		io.WriteCloser
 		Name() string
 	}(os.Stdout)
 	defer fh.Close()
+	var origFn string
 	if !(*flagOut == "" || *flagOut == "-") {
 		// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
 		_ = os.MkdirAll(filepath.Dir(*flagOut), 0750)
@@ -196,6 +198,7 @@ and dump all the columns of the cursor returned by the function.
 		}
 		defer pfh.Cleanup()
 		fh = pfh
+		origFn = *flagOut
 	}
 	wfh := io.WriteCloser(fh)
 	if *flagCompress != "" {
@@ -210,7 +213,7 @@ and dump all the columns of the cursor returned by the function.
 		}
 	}
 
-	logger.V(1).Info("writing", "file", fh.Name(), "encoding", enc)
+	logger.Debug("writing", "file", fh.Name(), "encoding", enc)
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		log.Printf("[WARN] Read-Only transaction: %v", err)
@@ -221,10 +224,10 @@ and dump all the columns of the cursor returned by the function.
 	defer tx.Rollback()
 
 	if len(flagSheets.Strings) == 0 &&
-		!strings.HasSuffix(*flagOut, ".ods") &&
-		!strings.HasSuffix(*flagOut, ".xlsx") {
+		!strings.HasSuffix(origFn, ".ods") &&
+		!strings.HasSuffix(origFn, ".xlsx") {
 		w := encoding.ReplaceUnsupported(enc.NewEncoder()).Writer(wfh)
-		logger.V(1).Info("encoding", "env", dbcsv.DefaultEncoding.Name)
+		logger.Debug("encoding", "env", dbcsv.DefaultEncoding.Name)
 
 		rows, columns, qErr := doQuery(ctx, tx, queries[0].Query, params, *flagCall, *flagSort)
 		if qErr != nil {
@@ -235,7 +238,7 @@ and dump all the columns of the cursor returned by the function.
 		}
 	} else {
 		var w spreadsheet.Writer
-		if strings.HasSuffix(fh.Name(), ".xlsx") {
+		if strings.HasSuffix(origFn, ".xlsx") {
 			w = xlsx.NewWriter(wfh)
 		} else {
 			w, err = ods.NewWriter(wfh)
@@ -268,7 +271,7 @@ and dump all the columns of the cursor returned by the function.
 				break
 			}
 			grp.Go(func() error {
-				logger.V(1).Info("DumpSheet", "name", name, "qry", qry)
+				logger.Debug("DumpSheet", "name", name, "qry", qry)
 				err := dbcsv.DumpSheet(grpCtx, sheet, rows, columns)
 				rows.Close()
 				if closeErr := sheet.Close(); closeErr != nil && err == nil {
@@ -428,7 +431,8 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 	if err != nil {
 		return nil, nil, fmt.Errorf("%q: %w", qry, err)
 	}
-	columns, err := dbcsv.GetColumns(rows)
+	columns, err := dbcsv.GetColumns(ctx, rows)
+	logger.Info("GetColumns", "columns", columns)
 	if err != nil {
 		rows.Close()
 		return nil, nil, err
