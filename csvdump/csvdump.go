@@ -190,7 +190,7 @@ and dump all the columns of the cursor returned by the function.
 	if !(*flagOut == "" || *flagOut == "-") {
 		// nosemgrep: go.lang.correctness.permissions.file_permission.incorrect-default-permission
 		_ = os.MkdirAll(filepath.Dir(*flagOut), 0750)
-		pfh, err := renameio.NewPendingFile(*flagOut)
+		pfh, err := renameio.NewPendingFile(*flagOut, renameio.WithPermissions(0640))
 		if err != nil {
 			return fmt.Errorf("%s: %w", *flagOut, err)
 		}
