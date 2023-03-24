@@ -20,6 +20,7 @@ import (
 
 	"github.com/UNO-SOFT/zlog/v2"
 	godror "github.com/godror/godror"
+	"golang.org/x/exp/slog"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -82,7 +83,7 @@ will execute a "SELECT * FROM Source_table@source_db WHERE F_ield=1" and an "INS
 	}
 
 	var Log func(...interface{}) error
-	if verbose {
+	if verbose.Level() < slog.LevelInfo {
 		Log = logger.Log
 	}
 	var replace map[string]string
