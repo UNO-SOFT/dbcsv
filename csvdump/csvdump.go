@@ -10,6 +10,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -66,6 +67,7 @@ func Main() error {
 	flag.Var(&verbose, "v", "verbose logging")
 	flagCompress := flag.String("compress", "", "compress output with gz/gzip or zst/zstd/zstandard")
 	flagCall := flag.Bool("call", false, "the first argument is not the WHERE, but the PL/SQL block to be called, the followings are not the columns but the arguments")
+	flagRemote := flag.Bool("remote", false, `the rows are XLSX commands in JSON {"c":"command_name", "a":[{"f":"float_value","s":"string_value", "i":"int_value"}]} format`)
 	flagTimeout := flag.Duration("timeout", 0, "timeout")
 
 	flag.Usage = func() {
@@ -200,6 +202,9 @@ and dump all the columns of the cursor returned by the function.
 		fh = pfh
 		origFn = *flagOut
 	}
+	if *flagRemote && !strings.HasSuffix(origFn, ".xlsx") {
+		return errors.New("-remote flag works only for xlsx")
+	}
 	wfh := io.WriteCloser(fh)
 	if *flagCompress != "" {
 		switch (strings.TrimSpace(strings.ToLower(*flagCompress)) + "  ")[:2] {
@@ -239,7 +244,9 @@ and dump all the columns of the cursor returned by the function.
 	} else {
 		var w spreadsheet.Writer
 		if strings.HasSuffix(origFn, ".xlsx") {
-			w = xlsx.NewWriter(wfh)
+			if !*flagRemote {
+				w = xlsx.NewWriter(wfh)
+			}
 		} else {
 			w, err = ods.NewWriter(wfh)
 			if err != nil {
@@ -257,6 +264,22 @@ and dump all the columns of the cursor returned by the function.
 			if qErr != nil {
 				err = qErr
 				break
+			}
+			if *flagRemote {
+				if len(columns) != 1 {
+					err = fmt.Errorf("-remote wants the queries to have only one column, %q has %d", name, len(columns))
+				}
+				if err = executeCommands(ctx, wfh, func() (string, error) {
+					if !rows.Next() {
+						return "", io.EOF
+					}
+					var s string
+					err := rows.Scan(&s)
+					return s, err
+				}); err != nil {
+					break
+				}
+				continue
 			}
 			header := make([]spreadsheet.Column, len(columns))
 			if *flagHeader {
