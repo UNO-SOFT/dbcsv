@@ -40,7 +40,7 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 		s, err := next()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				return nil
+				break
 			}
 			return err
 		}
@@ -55,7 +55,7 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 				c.Args[i].Type = "s"
 			}
 		}
-		fmt.Println("command:", c)
+		logger.Debug("executing", "command", c)
 		switch c.Name {
 		case "insertPageBreak":
 			if err = c.checkArgs("ss"); err == nil {
@@ -157,11 +157,13 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 			return fmt.Errorf("unknown command %q", c.Name)
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("command %#v: %w", c, err)
 		}
 	}
-	_, err := f.WriteTo(w)
-	return err
+	if _, err := f.WriteTo(w); err != nil {
+		return fmt.Errorf("WriteTo: %w", err)
+	}
+	return nil
 }
 
 var (

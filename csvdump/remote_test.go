@@ -12,10 +12,14 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/UNO-SOFT/zlog/v2"
 )
 
 func TestRemote(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	logger = zlog.NewT(t)
+	ctx := zlog.NewContext(context.Background(), logger)
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	var buf bytes.Buffer
 	var pos int
