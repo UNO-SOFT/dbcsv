@@ -24,6 +24,7 @@ type argument struct {
 	Date     time.Time              `json:"d,omitempty"`
 	String   string                 `json:"s,omitempty"`
 	Type     string                 `json:"t"`
+	Raw      json.RawMessage        `json:"r,omitempty"`
 	RichText []excelize.RichTextRun `json:"rich,omitempty"`
 	Float    float64                `json:"f,omitempty"`
 	Int      int                    `json:"i,omitempty"`
@@ -70,23 +71,23 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 				sheets[c.Args[0].String], err = f.NewSheet(c.Args[0].String)
 			}
 		case "newStyle":
-			if err = c.checkArgs("ss"); err == nil {
+			if err = c.checkArgs("sr"); err == nil {
 				var s excelize.Style
-				if err = json.Unmarshal([]byte(c.Args[1].String), &s); err == nil {
+				if err = json.Unmarshal(c.Args[1].Raw, &s); err == nil {
 					styles[c.Args[0].String], err = f.NewStyle(&s)
 				}
 			}
 		case "protectSheet":
-			if err = c.checkArgs("ss"); err == nil {
+			if err = c.checkArgs("sr"); err == nil {
 				var o excelize.SheetProtectionOptions
-				if err = json.Unmarshal([]byte(c.Args[1].String), &o); err == nil {
+				if err = json.Unmarshal(c.Args[1].Raw, &o); err == nil {
 					err = f.ProtectSheet(c.Args[0].String, &o)
 				}
 			}
 		case "protectWorkbook":
-			if err = c.checkArgs("s"); err == nil {
+			if err = c.checkArgs("r"); err == nil {
 				var o excelize.WorkbookProtectionOptions
-				if err = json.Unmarshal([]byte(c.Args[0].String), &o); err == nil {
+				if err = json.Unmarshal(c.Args[0].Raw, &o); err == nil {
 					err = f.ProtectWorkbook(&o)
 				}
 			}
@@ -95,8 +96,7 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 				f.SetActiveSheet(c.Args[0].Int)
 			}
 		case "setCell":
-			if !(len(c.Args) == 4 && (c.Args[2].Type == "H" || c.Args[2].Type == "hyperlink") ||
-				len(c.Args) == 3) {
+			if len(c.Args) != 3 {
 				return fmt.Errorf("setCell requires sheet,cell,value, got %v", c.Args)
 			}
 			sheet, cell := c.Args[0].String, c.Args[1].String
@@ -108,14 +108,16 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 				err = f.SetCellFloat(sheet, cell, a.Float, -1, 64)
 			case "F", "formula":
 				err = f.SetCellFormula(sheet, cell, a.String)
-			case "H", "hyperlink":
-				err = f.SetCellHyperLink(sheet, cell, a.String, c.Args[3].String)
 			case "i", "int":
 				err = f.SetCellInt(sheet, cell, a.Int)
 			case "R", "richtext":
 				err = f.SetCellRichText(sheet, cell, a.RichText)
 			default:
 				err = f.SetCellStr(sheet, cell, a.String)
+			}
+		case "setCellHyperlink":
+			if err = c.checkArgs("ssHs"); err == nil {
+				err = f.SetCellHyperLink(c.Args[0].String, c.Args[1].String, c.Args[2].String, c.Args[3].String)
 			}
 		case "setCellStyle":
 			if err = c.checkArgs("ssss"); err == nil {
@@ -126,7 +128,7 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 				err = f.SetColStyle(c.Args[0].String, c.Args[1].String, styles[c.Args[2].String])
 			}
 		case "setColOutlineLevel":
-			if err = c.checkArgs("sii"); err == nil {
+			if err = c.checkArgs("ssi"); err == nil {
 				err = f.SetColOutlineLevel(c.Args[0].String, c.Args[1].String, uint8(c.Args[2].Int))
 			}
 		case "setColWidth":
