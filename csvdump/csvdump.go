@@ -246,14 +246,15 @@ and dump all the columns of the cursor returned by the function.
 		if strings.HasSuffix(origFn, ".xlsx") {
 			if !*flagRemote {
 				w = xlsx.NewWriter(wfh)
+				defer w.Close()
 			}
 		} else {
 			w, err = ods.NewWriter(wfh)
 			if err != nil {
 				return err
 			}
+			defer w.Close()
 		}
-		defer w.Close()
 		grp, grpCtx := errgroup.WithContext(ctx)
 		for sheetNo := range queries {
 			qry, name := queries[sheetNo].Query, queries[sheetNo].Name
@@ -307,8 +308,10 @@ and dump all the columns of the cursor returned by the function.
 			return err
 		}
 		err = grp.Wait()
-		if closeErr := w.Close(); closeErr != nil && err == nil {
-			err = closeErr
+		if w != nil {
+			if closeErr := w.Close(); closeErr != nil && err == nil {
+				err = closeErr
+			}
 		}
 	}
 	cancel()

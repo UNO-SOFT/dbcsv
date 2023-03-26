@@ -28,6 +28,7 @@ func TestRemote(t *testing.T) {
 		`{"c":"insertPageBreak", "a":[{"s":"s"},{"s":"A100"}]}`,
 		`{"c":"mergeCell", "a":[{"s":"s"}, {"s":"A1"}, {"s":"B1"}]}`,
 		`{"c":"setCell","a":[{"s":"s"},{"s":"A2"},{"t":"f","f":3.14}]}`,
+		`{"c":"newStyle","a":[{"s":"header"},{"t":"r","r":` + "{\"Font\":{\"Bold\":true,\"Size\":16},\"Alignment\":{\"Horizontal\":\"center\",\"WrapText\":true}}" + `}]}`,
 	}
 	if err := executeCommands(ctx, &buf, func() (string, error) {
 		if pos >= len(commands) {

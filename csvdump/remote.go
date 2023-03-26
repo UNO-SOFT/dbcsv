@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"time"
 
 	"github.com/xuri/excelize/v2"
@@ -21,7 +22,8 @@ type command struct {
 	Args []argument `json:"a,omitempty"`
 }
 type argument struct {
-	Date     time.Time              `json:"d,omitempty"`
+	Date     *time.Time             `json:"d,omitempty"`
+	Coord    *coordinate            `json:"c,omitempty"`
 	String   string                 `json:"s,omitempty"`
 	Type     string                 `json:"t"`
 	Raw      json.RawMessage        `json:"r,omitempty"`
@@ -30,10 +32,30 @@ type argument struct {
 	Int      int                    `json:"i,omitempty"`
 	Bool     bool                   `json:"b,omitempty"`
 }
+type coordinate struct {
+	Row int `json:"r"`
+	Col int `json:"c"`
+}
+
+func colName(i int) string {
+	s, err := excelize.ColumnNumberToName(i)
+	if err != nil {
+		panic(fmt.Errorf("%d is not a valid column: %w", i, err))
+	}
+	return s
+}
+func (c *coordinate) String() string {
+	if c == nil {
+		return ""
+	}
+	return colName(c.Col) + strconv.Itoa(c.Row)
+}
 
 func executeCommands(ctx context.Context, w io.Writer, next func() (string, error)) error {
 	f := excelize.NewFile()
 	defer f.Close()
+	styles := make(map[string]int)
+	sheets := make(map[string]int)
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -45,8 +67,6 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 			}
 			return err
 		}
-		styles := make(map[string]int)
-		sheets := make(map[string]int)
 		var c command
 		if err = json.Unmarshal([]byte(s), &c); err != nil {
 			return fmt.Errorf("unmarshal %q: %w", s, err)
@@ -59,12 +79,12 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 		logger.Debug("executing", "command", c)
 		switch c.Name {
 		case "insertPageBreak":
-			if err = c.checkArgs("ss"); err == nil {
-				err = f.InsertPageBreak(c.Args[0].String, c.Args[1].String)
+			if err = c.checkArgs("sc"); err == nil {
+				err = f.InsertPageBreak(c.Args[0].String, c.Args[1].Coord.String())
 			}
 		case "mergeCell":
-			if err = c.checkArgs("sss"); err == nil {
-				err = f.MergeCell(c.Args[0].String, c.Args[1].String, c.Args[2].String)
+			if err = c.checkArgs("scc"); err == nil {
+				err = f.MergeCell(c.Args[0].String, c.Args[1].Coord.String(), c.Args[2].Coord.String())
 			}
 		case "newSheet":
 			if err = c.checkArgs("s"); err == nil {
@@ -76,6 +96,7 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 				if err = json.Unmarshal(c.Args[1].Raw, &s); err == nil {
 					styles[c.Args[0].String], err = f.NewStyle(&s)
 				}
+				logger.Debug("newStype", "raw", string(c.Args[1].Raw), "style", s, "name", c.Args[0].String, "index", styles[c.Args[0].String], "error", err)
 			}
 		case "protectSheet":
 			if err = c.checkArgs("sr"); err == nil {
@@ -96,10 +117,10 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 				f.SetActiveSheet(c.Args[0].Int)
 			}
 		case "setCell":
-			if len(c.Args) != 3 {
+			if len(c.Args) != 3 || c.Args[0].Type != "s" || c.Args[1].Type != "c" {
 				return fmt.Errorf("setCell requires sheet,cell,value, got %v", c.Args)
 			}
-			sheet, cell := c.Args[0].String, c.Args[1].String
+			sheet, cell := c.Args[0].String, c.Args[1].Coord.String()
 			a := c.Args[2]
 			switch a.Type {
 			case "b", "bool":
@@ -116,24 +137,39 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 				err = f.SetCellStr(sheet, cell, a.String)
 			}
 		case "setCellHyperlink":
-			if err = c.checkArgs("ssHs"); err == nil {
-				err = f.SetCellHyperLink(c.Args[0].String, c.Args[1].String, c.Args[2].String, c.Args[3].String)
+			if err = c.checkArgs("scHs"); err == nil {
+				err = f.SetCellHyperLink(c.Args[0].String, c.Args[1].Coord.String(), c.Args[2].String, c.Args[3].String)
 			}
 		case "setCellStyle":
-			if err = c.checkArgs("ssss"); err == nil {
-				err = f.SetCellStyle(c.Args[0].String, c.Args[1].String, c.Args[2].String, styles[c.Args[3].String])
+			if err = c.checkArgs("sccs"); err == nil {
+				if si, ok := styles[c.Args[3].String]; !ok {
+					err = fmt.Errorf("style %q is not found (have: %v)", c.Args[3].String, styles)
+				} else {
+					err = f.SetCellStyle(c.Args[0].String, c.Args[1].Coord.String(), c.Args[2].Coord.String(), si)
+				}
 			}
 		case "setColStyle":
-			if err = c.checkArgs("sss"); err == nil {
-				err = f.SetColStyle(c.Args[0].String, c.Args[1].String, styles[c.Args[2].String])
+			if err = c.checkArgs("siis"); err == nil {
+				if si, ok := styles[c.Args[3].String]; !ok {
+					err = fmt.Errorf("style %q is not found", c.Args[3].String)
+				} else {
+					cols := colName(c.Args[1].Int)
+					if c.Args[2].Int > c.Args[1].Int {
+						cols += ":" + strconv.Itoa(c.Args[2].Int)
+					}
+					err = f.SetColStyle(c.Args[0].String, cols, si)
+				}
 			}
 		case "setColOutlineLevel":
-			if err = c.checkArgs("ssi"); err == nil {
-				err = f.SetColOutlineLevel(c.Args[0].String, c.Args[1].String, uint8(c.Args[2].Int))
+			if err = c.checkArgs("sii"); err == nil {
+				err = f.SetColOutlineLevel(c.Args[0].String, colName(c.Args[1].Int), uint8(c.Args[2].Int))
 			}
 		case "setColWidth":
-			if err = c.checkArgs("sssf"); err == nil {
-				err = f.SetColWidth(c.Args[0].String, c.Args[1].String, c.Args[2].String, c.Args[3].Float)
+			if err = c.checkArgs("siif"); err == nil {
+				err = f.SetColWidth(
+					c.Args[0].String,
+					colName(c.Args[1].Int), colName(c.Args[1].Int),
+					c.Args[3].Float)
 			}
 		case "setDefaultFont":
 			if err = c.checkArgs("s"); err == nil {
