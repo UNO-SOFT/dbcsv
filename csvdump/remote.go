@@ -55,6 +55,7 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 	f := excelize.NewFile()
 	defer f.Close()
 	styles := make(map[string]int)
+	condStyles := make(map[string]int)
 	sheets := make(map[string]int)
 	for {
 		if err := ctx.Err(); err != nil {
@@ -96,7 +97,15 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 				if err = json.Unmarshal(c.Args[1].Raw, &s); err == nil {
 					styles[c.Args[0].String], err = f.NewStyle(&s)
 				}
-				logger.Debug("newStype", "raw", string(c.Args[1].Raw), "style", s, "name", c.Args[0].String, "index", styles[c.Args[0].String], "error", err)
+				logger.Debug("newStyle", "raw", string(c.Args[1].Raw), "style", s, "name", c.Args[0].String, "index", styles[c.Args[0].String], "error", err)
+			}
+		case "newConditionalStyle":
+			if err = c.checkArgs("sr"); err == nil {
+				var s excelize.Style
+				if err = json.Unmarshal(c.Args[1].Raw, &s); err == nil {
+					condStyles[c.Args[0].String], err = f.NewConditionalStyle(&s)
+				}
+				logger.Debug("newConditionalStype", "raw", string(c.Args[1].Raw), "style", s, "name", c.Args[0].String, "index", condStyles[c.Args[0].String], "error", err)
 			}
 		case "protectSheet":
 			if err = c.checkArgs("sr"); err == nil {
@@ -146,6 +155,17 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 					err = fmt.Errorf("style %q is not found (have: %v)", c.Args[3].String, styles)
 				} else {
 					err = f.SetCellStyle(c.Args[0].String, c.Args[1].Coord.String(), c.Args[2].Coord.String(), si)
+				}
+			}
+		case "setConditionalFormat":
+			if err = c.checkArgs("sccr"); err == nil {
+				var cf []excelize.ConditionalFormatOptions
+				if err = json.Unmarshal(c.Args[3].Raw, &cf); err == nil {
+					s := c.Args[1].Coord.String()
+					if c.Args[2].Coord != nil {
+						s += ":" + c.Args[2].Coord.String()
+					}
+					err = f.SetConditionalFormat(c.Args[0].String, s, cf)
 				}
 			}
 		case "setColStyle":

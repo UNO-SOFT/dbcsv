@@ -268,7 +268,7 @@ and dump all the columns of the cursor returned by the function.
 			}
 			if *flagRemote {
 				if len(columns) != 1 {
-					err = fmt.Errorf("-remote wants the queries to have only one column, %q has %d", name, len(columns))
+					return fmt.Errorf("-remote wants the queries to have only one column, %q has %d", name, len(columns))
 				}
 				if err = executeCommands(ctx, wfh, func() (string, error) {
 					if !rows.Next() {
