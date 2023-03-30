@@ -27,7 +27,7 @@ type argument struct {
 	String   string                 `json:"s,omitempty"`
 	Type     string                 `json:"t"`
 	Raw      json.RawMessage        `json:"r,omitempty"`
-	RichText []excelize.RichTextRun `json:"rich,omitempty"`
+	RichText []excelize.RichTextRun `json:"R,omitempty"`
 	Float    float64                `json:"f,omitempty"`
 	Int      int                    `json:"i,omitempty"`
 	Bool     bool                   `json:"b,omitempty"`
