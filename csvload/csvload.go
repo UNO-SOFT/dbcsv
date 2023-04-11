@@ -1,4 +1,4 @@
-// Copyright 2021, 2022 Tamás Gulácsi.
+// Copyright 2021, 2023 Tamás Gulácsi.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -26,13 +26,15 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/UNO-SOFT/dbcsv"
-	"github.com/UNO-SOFT/zlog/v2"
-
 	"github.com/peterbourgon/ff/v3/ffcli"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/godror/godror"
+
+	"github.com/UNO-SOFT/dbcsv"
+
+	"github.com/UNO-SOFT/zlog/v2"
+	"golang.org/x/exp/slog"
 )
 
 var (
@@ -42,7 +44,7 @@ var (
 
 func main() {
 	if err := Main(); err != nil {
-		logger.Error(err, "Main")
+		slog.Error("Main", "error", err)
 		os.Exit(1)
 	}
 }
@@ -65,6 +67,8 @@ type config struct {
 }
 
 func Main() error {
+	slog.SetDefault(logger.SLog())
+
 	encName := os.Getenv("LANG")
 	if i := strings.IndexByte(encName, '.'); i >= 0 {
 		encName = encName[i+1:]
@@ -173,11 +177,11 @@ func Main() error {
 		}
 		defer f.Close()
 		cfg.WriteHeapProf = func() {
-			logger.V(1).Info("writeHeapProf")
+			slog.Debug("writeHeapProf")
 			_, _ = f.Seek(0, 0)
 			runtime.GC() // get up-to-date statistics
 			if err := pprof.WriteHeapProfile(f); err != nil {
-				logger.Error(err, "write memory profile")
+				slog.Error("write memory profile", "error", err)
 			}
 		}
 	}
@@ -228,7 +232,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	select {
 	case err := <-firstRowErr:
 		if err != nil {
-			logger.Error(err, "first row")
+			slog.Error("first row", "error", err)
 			return err
 		}
 	case <-grpCtx.Done():
@@ -237,7 +241,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	if len(fields) == 0 {
 		fields = firstRow.Columns
 	}
-	logger.V(1).Info("first row", "fields", fields)
+	slog.Debug("fields", "fields", fields)
 
 	if cfg.JustPrint {
 		fmt.Println("INSERT ALL")
@@ -335,7 +339,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		qry = tbl
 		s := qry[strings.Index(qry, "VALUES")+6:]
 		s = s[strings.IndexByte(s, '(')+1 : strings.LastIndexByte(s, ')')]
-		logger.V(1).Info("full insert", "qry", s)
+		slog.Debug("tblFullInsert", "qry", s)
 		for x, i := strings.Count(s, ":"), 0; i < x; i++ {
 			columns = append(columns, Column{Name: fmt.Sprintf("%d", i+1)})
 		}
@@ -351,7 +355,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		}()
 		columns, err = CreateTable(defCtx, db, tbl, ctRows, cfg.Truncate, cfg.Tablespace, cfg.Copy, cfg.ForceString)
 		if err != nil {
-			logger.Error(err, "create", "table", tbl)
+			slog.Error("create", "table", tbl, "error", err)
 			return err
 		}
 		columns = filterCols(columns, fields)
@@ -377,7 +381,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	if err := grp.Wait(); err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
-	logger.Info("synthetized", "qry", qry)
+	slog.Info("synthetized", "qry", qry)
 
 	var hasLOB bool
 	chunkSize := cfg.ChunkSize
@@ -422,7 +426,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 				chunk := rs.Rows
 				var err error
 				if err = grpCtx.Err(); err != nil {
-					logger.Error(err, "GrpRows")
+					slog.Error("GrpRows", "error", err)
 					return nil
 				}
 				if len(chunk) == 0 {
@@ -453,10 +457,10 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 
 				for i, col := range cols {
 					if rowsI[i], err = columns[i].FromString(col); err != nil {
-						logger.Error(err, "FromString", "col", i)
+						slog.Error("FromString", "col", i, "error", err)
 						for k, row := range chunk {
 							if _, err = columns[i].FromString(col[k : k+1]); err != nil {
-								logger.Error(err, "FromString", "start", rs.Start+int64(k), "column", columns[i].Name, "value", col[k:k+1], "row", row)
+								slog.Error("FromString", "start", rs.Start+int64(k), "column", columns[i].Name, "value", col[k:k+1], "row", row, "error", err)
 								break
 							}
 						}
@@ -478,10 +482,10 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 					continue
 				}
 				if chunkSize == 1 {
-					logger.Error(err, "exec", "qry", qry, "rows", rowsI)
+					slog.Error("exec", "qry", qry, "rows", rowsI, "error", err)
 					return fmt.Errorf("%s [%v]: %w", qry, rowsI, err)
 				}
-				logger.Error(err, "exec", "qry", qry)
+				slog.Error("exec", "qry", qry, "error", err)
 				err = fmt.Errorf("%s: %w", qry, err)
 
 				rowsR := make([]reflect.Value, len(rowsI))
@@ -494,14 +498,14 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 				for j := range cols[0] { // rows
 					for i, r := range rowsR { // cols
 						if r.Len() <= j {
-							logger.Info("debug", "row", j, "column", columns[i].Name, "len", r.Len())
+							slog.Info("debug", "row", j, "column", columns[i].Name, "len", r.Len())
 							rowsI2[i] = ""
 							continue
 						}
 						R2.Index(i).Set(r.Index(j))
 					}
 					if _, err = stmt.Exec(rowsI2...); err != nil {
-						logger.Error(err, "exec", "rows", rowsI2)
+						slog.Error("exec", "rows", rowsI2, "error", err)
 						return fmt.Errorf("%s, %q: %w", qry, rowsI2, err)
 					}
 				}
@@ -527,7 +531,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		func(ctx context.Context, fn string, row dbcsv.Row) error {
 			var err error
 			if err = ctx.Err(); err != nil {
-				logger.Error(err, "GrpRead")
+				slog.Error("GrpRead", "error", err)
 				return nil
 			}
 
@@ -555,7 +559,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 			case rowsCh <- rowsType{Rows: chunk, Start: n}:
 				n += int64(len(chunk))
 			case <-ctx.Done():
-				logger.Error(ctx.Err(), "CTX")
+				slog.Error("CTX", "error", ctx.Err())
 				return nil
 			}
 
@@ -563,7 +567,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 			return nil
 		},
 	); err != nil {
-		logger.Error(err, "ReadRows")
+		slog.Error("ReadRows", "error", err)
 		return err
 	}
 
@@ -575,10 +579,10 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 
 	err := grp.Wait()
 	if err != nil {
-		logger.Error(err, "ERROR")
+		slog.Error("ERROR", "error", err)
 	}
 	dur := time.Since(start)
-	logger.V(1).Info("read finished", "read", n, "inserted", inserted, "src", src, "tbl", tbl, "dur", dur.String())
+	slog.Debug("timing", "read", n, "inserted", inserted, "src", src, "tbl", tbl, "dur", dur.String())
 	return err
 }
 
@@ -623,7 +627,7 @@ func tableSplitOwner(tbl string) (string, string) {
 	if tbl == "" {
 		panic("empty tabl name")
 	}
-	logger.V(1).Info("tableSplitOwner", "tbl", tbl)
+	slog.Debug("tblSplitOwner", "tbl", tbl)
 	if i := strings.IndexByte(tbl, '.'); i >= 0 {
 		return tbl[:i], tbl[i+1:]
 	}
@@ -726,7 +730,7 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
 			buf.WriteString(tablespace)
 		}
 		qry = buf.String()
-		logger.Info("qry", qry)
+		slog.Info("qry", qry)
 		if _, err := db.Exec(qry); err != nil {
 			return cols, fmt.Errorf("%s: %w", qry, err)
 		}
@@ -945,7 +949,7 @@ func filterCols(cols []Column, fields []string) []Column {
 		} else if i, ok = m[mkColName(f)]; ok {
 			columns = append(columns, cols[i])
 		} else {
-			logger.Info("filter out", "field", f, "col", mkColName(f))
+			slog.Info("filter out", "field", f, "col", mkColName(f))
 		}
 	}
 	return columns
