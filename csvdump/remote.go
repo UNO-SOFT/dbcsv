@@ -145,6 +145,10 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 			default:
 				err = f.SetCellStr(sheet, cell, a.String)
 			}
+		case "setCellFormula":
+			if err = c.checkArgs("scs"); err == nil {
+				err = f.SetCellFormula(c.Args[0].String, c.Args[1].Coord.String(), c.Args[2].String)
+			}
 		case "setCellHyperlink":
 			if err = c.checkArgs("scHs"); err == nil {
 				err = f.SetCellHyperLink(c.Args[0].String, c.Args[1].Coord.String(), c.Args[2].String, c.Args[3].String)
