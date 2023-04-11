@@ -37,6 +37,7 @@ import (
 	"github.com/UNO-SOFT/spreadsheet/xlsx"
 
 	"github.com/UNO-SOFT/zlog/v2"
+	"golang.org/x/exp/slog"
 )
 
 var (
@@ -46,12 +47,14 @@ var (
 
 func main() {
 	if err := Main(); err != nil {
-		logger.Error(err, "Main")
+		slog.Error("Main", "error", err)
 		os.Exit(1)
 	}
 }
 
 func Main() error {
+	slog.SetDefault(logger.SLog())
+
 	flagConnect := flag.String("connect", os.Getenv("DB_ID"), "user/passw@sid to connect to")
 	flagDateFormat := flag.String("date", "2006-01-02T15:04:05", "date format, in Go notation")
 	flagSep := flag.String("sep", ",", "separator")
@@ -295,7 +298,7 @@ and dump all the columns of the cursor returned by the function.
 				break
 			}
 			grp.Go(func() error {
-				logger.Debug("DumpSheet", "name", name, "qry", qry)
+				slog.Debug("DumpSheet", "name", name, "qry", qry)
 				err := dbcsv.DumpSheet(grpCtx, sheet, rows, columns)
 				rows.Close()
 				if closeErr := sheet.Close(); closeErr != nil && err == nil {
@@ -382,7 +385,7 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 		if _, err = db.ExecContext(ctx, qry, params...); err == nil {
 			rows, err = godror.WrapRows(ctx, db, dRows)
 		} else {
-			logger.Error(err, "call", "qry", qry, "params", fmt.Sprintf("%#v", params))
+			slog.Error("call", "qry", qry, "params", fmt.Sprintf("%#v", params), "error", err)
 		}
 	} else {
 		origQry := qry
@@ -458,7 +461,7 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 		return nil, nil, fmt.Errorf("%q: %w", qry, err)
 	}
 	columns, err := dbcsv.GetColumns(ctx, rows)
-	logger.Info("GetColumns", "columns", columns)
+	slog.Info("GetColumns", "columns", columns)
 	if err != nil {
 		rows.Close()
 		return nil, nil, err
@@ -489,7 +492,7 @@ func splitParamArgs(fun string, args []string) (plsql string, params []interface
 		buf.WriteByte(')')
 	}
 	buf.WriteString("; END;")
-	logger.Info("splitParamArgs", "fun", fun, "args", args, "qry", buf.String(), "params", params)
+	slog.Info("splitParamArgs", "fun", fun, "args", args, "qry", buf.String(), "params", params)
 	return buf.String(), params
 }
 

@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/xuri/excelize/v2"
+
+	"golang.org/x/exp/slog"
 )
 
 type command struct {
@@ -77,7 +79,7 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 				c.Args[i].Type = "s"
 			}
 		}
-		logger.Debug("executing", "command", c)
+		slog.Debug("executing", "command", c)
 		switch c.Name {
 		case "insertPageBreak":
 			if err = c.checkArgs("sc"); err == nil {
@@ -97,7 +99,7 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 				if err = json.Unmarshal(c.Args[1].Raw, &s); err == nil {
 					styles[c.Args[0].String], err = f.NewStyle(&s)
 				}
-				logger.Debug("newStyle", "raw", string(c.Args[1].Raw), "style", s, "name", c.Args[0].String, "index", styles[c.Args[0].String], "error", err)
+				slog.Debug("newStyle", "raw", string(c.Args[1].Raw), "style", s, "name", c.Args[0].String, "index", styles[c.Args[0].String], "error", err)
 			}
 		case "newConditionalStyle":
 			if err = c.checkArgs("sr"); err == nil {
@@ -105,7 +107,7 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 				if err = json.Unmarshal(c.Args[1].Raw, &s); err == nil {
 					condStyles[c.Args[0].String], err = f.NewConditionalStyle(&s)
 				}
-				logger.Debug("newConditionalStype", "raw", string(c.Args[1].Raw), "style", s, "name", c.Args[0].String, "index", condStyles[c.Args[0].String], "error", err)
+				slog.Debug("newConditionalStype", "raw", string(c.Args[1].Raw), "style", s, "name", c.Args[0].String, "index", condStyles[c.Args[0].String], "error", err)
 			}
 		case "protectSheet":
 			if err = c.checkArgs("sr"); err == nil {
@@ -142,7 +144,10 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 				err = f.SetCellInt(sheet, cell, a.Int)
 			case "R", "richtext":
 				err = f.SetCellRichText(sheet, cell, a.RichText)
+			case "s", "string":
+				err = f.SetCellStr(sheet, cell, a.String)
 			default:
+				slog.Warn("setCell", "sheet", sheet, "cell", cell, "arg", a, "unknown type", a.Type)
 				err = f.SetCellStr(sheet, cell, a.String)
 			}
 		case "setCellFormula":
