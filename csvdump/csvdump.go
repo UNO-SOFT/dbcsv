@@ -318,21 +318,18 @@ and dump all the columns of the cursor returned by the function.
 		}
 	}
 	cancel()
+	if err != nil {
+		return err
+	}
 	if wfh != fh {
-		if closeErr := wfh.Close(); closeErr != nil && err == nil {
-			err = closeErr
+		if err = wfh.Close(); err != nil {
+			return err
 		}
 	}
-	var closeErr error
 	if pfh, ok := fh.(interface{ CloseAtomicallyReplace() error }); ok {
-		closeErr = pfh.CloseAtomicallyReplace()
-	} else {
-		closeErr = fh.Close()
+		return pfh.CloseAtomicallyReplace()
 	}
-	if closeErr != nil && err == nil {
-		err = closeErr
-	}
-	return err
+	return fh.Close()
 }
 
 func getQuery(table, where string, columns []string, enc encoding.Encoding) string {
