@@ -24,7 +24,6 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/text/encoding"
 
-	"github.com/go-logr/logr"
 	"github.com/google/renameio/v2"
 	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/compress/zstd"
@@ -186,7 +185,7 @@ and dump all the columns of the cursor returned by the function.
 		ctx, cancel = context.WithTimeout(ctx, *flagTimeout)
 		defer cancel()
 	}
-	ctx = logr.NewContext(zlog.NewContext(ctx, logger), logger.Logr())
+	ctx = zlog.NewContext(ctx, logger)
 
 	fh := interface {
 		io.WriteCloser

@@ -18,12 +18,14 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/exp/slog"
+	
 	"github.com/UNO-SOFT/spreadsheet"
-	"github.com/go-logr/logr"
+	"github.com/UNO-SOFT/zlog/v2"
 )
 
 func DumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column, header bool, sep string, raw bool) error {
-	logger := logr.FromContextOrDiscard(ctx)
+	logger := zlog.SFromContext(ctx)
 	sepB := []byte(sep)
 	dest := make([]interface{}, len(columns))
 	bw := bufio.NewWriterSize(w, 65536)
@@ -86,12 +88,12 @@ func DumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column,
 	}
 	err := rows.Err()
 	dur := time.Since(start)
-	logger.V(1).Info("dump finished", "rows", n, "dur", dur.String(), "speed", fmt.Sprintf("%.3f 1/s", float64(n)/float64(dur*time.Second)), "error", err)
+	logger.Debug("dump finished", "rows", n, "dur", dur.String(), "speed", fmt.Sprintf("%.3f 1/s", float64(n)/float64(dur*time.Second)), "error", err)
 	return err
 }
 
 func DumpSheet(ctx context.Context, sheet spreadsheet.Sheet, rows *sql.Rows, columns []Column) error {
-	logger := logr.FromContextOrDiscard(ctx)
+	logger := zlog.SFromContext(ctx)
 	dest := make([]interface{}, len(columns))
 	vals := make([]interface{}, len(columns))
 	values := make([]Stringer, len(columns))
@@ -103,7 +105,6 @@ func DumpSheet(ctx context.Context, sheet spreadsheet.Sheet, rows *sql.Rows, col
 	}
 	start := time.Now()
 	n := 0
-	dbg := logger.V(1)
 	for rows.Next() {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -111,8 +112,8 @@ func DumpSheet(ctx context.Context, sheet spreadsheet.Sheet, rows *sql.Rows, col
 		if err := rows.Scan(dest...); err != nil {
 			return fmt.Errorf("scan into %#v: %w", dest, err)
 		}
-		if dbg.Enabled() {
-			dbg.Info("scan", "rows", dest, "vals", fmt.Sprintf("%#v", vals))
+		if logger.Enabled(ctx, slog.LevelDebug) {
+			logger.Debug("scan", "rows", dest, "vals", fmt.Sprintf("%#v", vals))
 		}
 		if err := sheet.AppendRow(vals...); err != nil {
 			return err
@@ -121,7 +122,7 @@ func DumpSheet(ctx context.Context, sheet spreadsheet.Sheet, rows *sql.Rows, col
 	}
 	err := rows.Err()
 	dur := time.Since(start)
-	logger.V(1).Info("dump finished", "rows", n, "dur", dur.String(), "speed", float64(n)/float64(dur)*float64(time.Second), "error", err)
+	logger.Debug("dump finished", "rows", n, "dur", dur.String(), "speed", float64(n)/float64(dur)*float64(time.Second), "error", err)
 	return err
 }
 
@@ -138,7 +139,7 @@ func (col Column) Converter(sep string) Stringer {
 	case reflect.Int32, reflect.Int64, reflect.Int:
 		return &ValInt{}
 	case reflect.String:
-		if col.DatabaseType == "NUMBER" {
+		if col.DatabaseType == "NUMBER" && !(col.Precision == 0 && col.Scale == 0) {
 			if col.Scale == 0 && col.Precision <= 19 {
 				return &ValInt{}
 			}
@@ -313,7 +314,7 @@ func csvQuote(w io.Writer, sep, s string) (int, error) {
 }
 
 func GetColumns(ctx context.Context, rows interface{}) ([]Column, error) {
-	//logger := logr.FromContextOrDiscard(ctx)
+	logger := zlog.SFromContext(ctx)
 	if r, ok := rows.(*sql.Rows); ok {
 		types, err := r.ColumnTypes()
 		if err != nil {
@@ -321,7 +322,6 @@ func GetColumns(ctx context.Context, rows interface{}) ([]Column, error) {
 		}
 		cols := make([]Column, len(types))
 		for i, t := range types {
-			//logger.Debug("column", "i", i, "t", fmt.Sprintf("%#v", t))
 			precision, scale, _ := t.DecimalSize()
 			cols[i] = Column{
 				Name:         t.Name(),
@@ -329,6 +329,7 @@ func GetColumns(ctx context.Context, rows interface{}) ([]Column, error) {
 				Type:         t.ScanType(),
 				Precision:    int(precision), Scale: int(scale),
 			}
+			logger.Debug("column", "i", i, "t", fmt.Sprintf("%#v", t), "col", cols[i])
 		}
 		return cols, nil
 	}
