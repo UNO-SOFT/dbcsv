@@ -170,7 +170,7 @@ type ValNumber struct {
 	value godror.Number
 }
 
-func (v ValNumber) Value() (driver.Value, error) { return v.value.Value() }
+func (v ValNumber) Value() (driver.Value, error) { return spreadsheet.Number(v.value), nil }
 func (v ValNumber) String() string               { return csvQuoteString(v.Sep, string(v.value)) }
 func (v ValNumber) StringRaw() string            { return string(v.value) }
 func (v *ValNumber) Pointer() interface{}        { return &v.value }
