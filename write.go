@@ -19,9 +19,11 @@ import (
 	"time"
 
 	"golang.org/x/exp/slog"
-	
+
 	"github.com/UNO-SOFT/spreadsheet"
 	"github.com/UNO-SOFT/zlog/v2"
+
+	"github.com/godror/godror"
 )
 
 func DumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column, header bool, sep string, raw bool) error {
@@ -145,7 +147,7 @@ func (col Column) Converter(sep string) Stringer {
 			}
 			return &ValFloat{}
 		}
-		return &ValString{Sep: sep}
+		return &ValNumber{Sep: sep}
 	}
 
 	switch col.Type {
@@ -163,6 +165,16 @@ type Stringer interface {
 	sql.Scanner
 	driver.Valuer
 }
+type ValNumber struct {
+	Sep   string
+	value godror.Number
+}
+
+func (v ValNumber) Value() (driver.Value, error) { return v.value.Value() }
+func (v ValNumber) String() string               { return csvQuoteString(v.Sep, string(v.value)) }
+func (v ValNumber) StringRaw() string            { return string(v.value) }
+func (v *ValNumber) Pointer() interface{}        { return &v.value }
+func (v *ValNumber) Scan(x interface{}) error    { return v.value.Scan(x) }
 
 type ValString struct {
 	Sep   string
