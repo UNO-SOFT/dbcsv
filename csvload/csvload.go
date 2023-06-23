@@ -64,6 +64,7 @@ type config struct {
 	dbcsv.Config
 	Concurrency, ChunkSize           int
 	ForceString, JustPrint, Truncate bool
+	LobSource                        bool
 }
 
 func Main() error {
@@ -87,6 +88,7 @@ func Main() error {
 	fs.StringVar(&cfg.Copy, "copy", "", "copy this table's structure")
 	fs.IntVar(&cfg.ChunkSize, "chunk-size", defaultChunkSize, "chunk size - number of rows inserted at once")
 	fs.Var(&verbose, "v", "verbose logging")
+	fs.BoolVar(&cfg.LobSource, "lob", false, "source is not a filename but a query that returns a LOB")
 	if *flagConnect == "" {
 		*flagConnect = os.Getenv("BRUNO_ID")
 	}
@@ -114,7 +116,7 @@ func Main() error {
 
 	sheetCmd := ffcli.Command{Name: "sheet",
 		Exec: func(ctx context.Context, args []string) error {
-			if err := cfg.Open(args[0]); err != nil {
+			if err := cfg.Config.Open(args[0]); err != nil {
 				return err
 			}
 			defer cfg.Close()
@@ -198,7 +200,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	tbl = strings.ToUpper(tbl)
 	tblFullInsert := strings.HasPrefix(tbl, "INSERT /*+ APPEND */ INTO ")
 
-	if err := cfg.Open(src); err != nil {
+	if err := cfg.Open(ctx, db, src); err != nil {
 		return err
 	}
 	defer cfg.Close()
@@ -989,6 +991,49 @@ func mkColName(v string) string {
 	hsh.Write([]byte(v))
 	var a [4]byte
 	return v[:30-7] + base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(hsh.Sum(a[:0]))
+}
+
+func (cfg config) Open(ctx context.Context, db *sql.DB, fn string) (err error) {
+	if cfg.LobSource {
+		fh, tempErr := os.CreateTemp("", "csvload-*.csv")
+		if tempErr != nil {
+			return err
+		}
+		os.Remove(fh.Name())
+		defer func() {
+			if err != nil {
+				fh.Close()
+			}
+		}()
+		qry := strings.TrimSpace(fn)
+		var lob godror.Lob
+		if len(qry) > len("SELECT") && (strings.EqualFold(qry, "SELECT") || strings.EqualFold(qry, "WITH")) {
+			rows, err := db.QueryContext(ctx, qry)
+			if err != nil {
+				return fmt.Errorf("%s: %w", qry, err)
+			}
+			defer rows.Close()
+			if !rows.Next() {
+				return io.EOF
+			}
+			if err = rows.Scan(&lob); err != nil {
+				return err
+			}
+		} else {
+			if _, err = db.ExecContext(ctx, qry, sql.Out{Dest: &lob}); err != nil {
+				return fmt.Errorf("%s: %w", qry, err)
+			}
+		}
+		if _, err = io.Copy(fh, lob); err != nil {
+			return err
+		}
+		if _, err = fh.Seek(0, 0); err != nil {
+			return err
+		}
+		os.Stdin.Close()
+		fn, os.Stdin = "", fh
+	}
+	return cfg.Config.Open(fn)
 }
 
 // vim: set fileencoding=utf-8 noet:
