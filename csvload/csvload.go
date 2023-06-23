@@ -1007,21 +1007,23 @@ func (cfg config) Open(ctx context.Context, db *sql.DB, fn string) (err error) {
 		}()
 		qry := strings.TrimSpace(fn)
 		var lob godror.Lob
-		if len(qry) > len("SELECT") && (strings.EqualFold(qry, "SELECT") || strings.EqualFold(qry, "WITH")) {
-			rows, err := db.QueryContext(ctx, qry)
+		if len(qry) > len("SELECT") && (strings.EqualFold(qry[:len("SELECT")], "SELECT") || strings.EqualFold(qry[:len("WITH")], "WITH")) {
+			rows, err := db.QueryContext(ctx, qry, godror.LobAsReader())
 			if err != nil {
-				return fmt.Errorf("%s: %w", qry, err)
+				return fmt.Errorf("query %s: %w", qry, err)
 			}
 			defer rows.Close()
 			if !rows.Next() {
 				return io.EOF
 			}
-			if err = rows.Scan(&lob); err != nil {
-				return err
+			var lobI interface{}
+			if err = rows.Scan(&lobI); err != nil {
+				return fmt.Errorf("scan %s: %w", qry, err)
 			}
+			lob = *(lobI.(*godror.Lob))
 		} else {
 			if _, err = db.ExecContext(ctx, qry, sql.Out{Dest: &lob}); err != nil {
-				return fmt.Errorf("%s: %w", qry, err)
+				return fmt.Errorf("exec %s: %w", qry, err)
 			}
 		}
 		if _, err = io.Copy(fh, lob); err != nil {
