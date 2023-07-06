@@ -61,7 +61,7 @@ const defaultChunkSize = 1024
 type config struct {
 	WriteHeapProf    func()
 	Tablespace, Copy string
-	dbcsv.Config
+	*dbcsv.Config
 	Concurrency, ChunkSize           int
 	ForceString, JustPrint, Truncate bool
 	LobSource                        bool
@@ -77,7 +77,7 @@ func Main() error {
 		encName = "UTF-8"
 	}
 
-	var cfg config
+	cfg := config{Config: new(dbcsv.Config)}
 	fs := flag.NewFlagSet("load", flag.ContinueOnError)
 	flagConnect := fs.String("connect", os.Getenv("DB_ID"), "database to connect to")
 	fs.BoolVar(&cfg.Truncate, "truncate", false, "truncate table")
@@ -120,7 +120,7 @@ func Main() error {
 				return err
 			}
 			defer cfg.Close()
-			m, err := cfg.ReadSheets(ctx)
+			m, err := cfg.Config.ReadSheets(ctx)
 			if err != nil {
 				return err
 			}
@@ -214,7 +214,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	grp, grpCtx := errgroup.WithContext(defCtx)
 	grp.Go(func() error {
 		defer close(rows)
-		err := cfg.ReadRows(grpCtx,
+		err := cfg.Config.ReadRows(grpCtx,
 			func(ctx context.Context, _ string, row dbcsv.Row) error {
 				if firstRow.Columns == nil {
 					firstRow = row
@@ -234,7 +234,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	select {
 	case err := <-firstRowErr:
 		if err != nil {
-			slog.Error("first row", "error", err)
+			slog.Error("first", "row", firstRow, "error", err)
 			return err
 		}
 	case <-grpCtx.Done():
@@ -529,7 +529,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 
 	var headerSeen bool
 	chunk := (*(chunkPool.Get().(*[][]string)))[:0]
-	if err := cfg.ReadRows(grpCtx,
+	if err := cfg.Config.ReadRows(grpCtx,
 		func(ctx context.Context, fn string, row dbcsv.Row) error {
 			var err error
 			if err = ctx.Err(); err != nil {

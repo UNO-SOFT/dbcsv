@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/slog"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/encoding/htmlindex"
@@ -147,22 +148,31 @@ func (cfg *Config) Columns() ([]int, error) {
 	return cfg.columns, err
 }
 func (cfg *Config) Rewind() error {
+	if cfg.file == nil {
+		panic("file is nil")
+	}
+	if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
+		slog.Debug("Rewind", "file", fmt.Sprintf("%+v", cfg.file))
+	}
 	if cfg.zr != nil {
 		cfg.zr.Close()
 	}
 	_, err := cfg.file.Seek(0, 0)
 	if err != nil {
-		return err
+		return fmt.Errorf("seek %v: %w", cfg.file, err)
 	}
 	if cfg.zr != nil {
 		if zr, err := zstd.NewReader(cfg.file); err != nil {
-			return err
+			return fmt.Errorf("zstd.NewReader(%v): %w", cfg.file, err)
 		} else {
 			cfg.zr = zr
 			cfg.rdr = zr.IOReadCloser()
 		}
 	}
-	return err
+	if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
+		slog.Debug("Rewind", "file", fmt.Sprintf("%+v", cfg.file))
+	}
+	return nil
 }
 
 func (cfg *Config) Type() (FileType, error) {
@@ -170,6 +180,7 @@ func (cfg *Config) Type() (FileType, error) {
 		return cfg.typ, nil
 	}
 	typ, err := DetectReaderType(cfg.file, cfg.fileName)
+	slog.Debug("DetectReaderType", "typ", typ, "error", err)
 	if err == nil {
 		err = cfg.Rewind()
 	}
@@ -194,11 +205,12 @@ func (cfg *Config) Open(fileName string) error {
 		cfg.file = f
 		slurp = !fi.Mode().IsRegular()
 	}
+	slog.Debug("Open", "file", fileName, "slurp", slurp)
 	var buf bytes.Buffer
 	r := io.Reader(cfg.file)
 	typ, err := DetectReaderType(io.TeeReader(r, &buf), cfg.fileName)
 	if err != nil {
-		return err
+		return fmt.Errorf("DetectReaderType: %w", err)
 	}
 	cfg.typ = typ
 	r = io.MultiReader(bytes.NewReader(buf.Bytes()), r)
@@ -234,7 +246,7 @@ func (cfg *Config) Open(fileName string) error {
 			}
 		}
 
-		log.Printf("Copying into temporary file %q...", fh.Name())
+		slog.Debug("Copying", "temporaryFile", fh.Name())
 		if _, err = io.Copy(w, r); err != nil {
 			return err
 		}
@@ -274,10 +286,14 @@ func (cfg *Config) Open(fileName string) error {
 	if err != nil {
 		return fmt.Errorf("type %s: %w", cfg.fileName, err)
 	}
+	if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
+		slog.Debug("opened", "file", fmt.Sprintf("%+v", cfg.file), "rdr", fmt.Sprintf("%+v", cfg.rdr))
+	}
 	return nil
 }
 
 func (cfg *Config) Close() error {
+	slog.Debug("cfg.Close")
 	zr, rdr, fh := cfg.zr, cfg.rdr, cfg.file
 	cfg.zr, cfg.rdr, cfg.file, cfg.fileName, cfg.typ = nil, nil, nil, "", FileType{Type: Unknown}
 	var err error
@@ -294,16 +310,19 @@ func (cfg *Config) Close() error {
 }
 
 func (cfg *Config) ReadRows(ctx context.Context, fn func(context.Context, string, Row) error) (err error) {
+	if cfg.file == nil {
+		panic("file is nil")
+	}
 	if err = ctx.Err(); err != nil {
-		log.Printf("cTx: %+v", err)
+		log.Printf("ctx: %+v", err)
 		return err
 	}
 	if err := cfg.parseColumnsString(); err != nil {
-		return err
+		return fmt.Errorf("parseColumnsStrings: %w", err)
 	}
 
 	if err := cfg.Rewind(); err != nil {
-		return err
+		return fmt.Errorf("rewind: %w", err)
 	}
 	switch cfg.typ.Type {
 	case Xls:
@@ -313,7 +332,7 @@ func (cfg *Config) ReadRows(ctx context.Context, fn func(context.Context, string
 	}
 	enc, err := cfg.Encoding()
 	if err != nil {
-		return err
+		return fmt.Errorf("encoding: %w", err)
 	}
 	r := transform.NewReader(cfg.rdr, enc.NewDecoder())
 	return ReadCSV(ctx, func(ctx context.Context, row Row) error { return fn(ctx, cfg.fileName, row) }, r, cfg.Delim, cfg.columns, cfg.Skip)
@@ -574,7 +593,7 @@ func ReadCSV(ctx context.Context, fn func(context.Context, Row) error, r io.Read
 	if delim == "" {
 		b, err := br.Peek(1024)
 		if err != nil && len(b) == 0 {
-			return err
+			return fmt.Errorf("peek: %w", err)
 		}
 		var maxCnt int
 		for _, r := range []rune{',', ';', '\t', ' '} {
@@ -601,7 +620,7 @@ func ReadCSV(ctx context.Context, fn func(context.Context, Row) error, r io.Read
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			return err
+			return fmt.Errorf("csv read: %w", err)
 		}
 		n++
 		if n <= skip {
@@ -628,7 +647,7 @@ func ReadCSV(ctx context.Context, fn func(context.Context, Row) error, r io.Read
 			if !errors.Is(err, context.Canceled) {
 				log.Printf("Consume %d. row: %+v", n, err)
 			}
-			return err
+			return fmt.Errorf("fn: %w", err)
 		}
 	}
 	return nil
