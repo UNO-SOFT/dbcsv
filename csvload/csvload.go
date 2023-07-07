@@ -584,7 +584,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		slog.Error("ERROR", "error", err)
 	}
 	dur := time.Since(start)
-	slog.Debug("timing", "read", n, "inserted", inserted, "src", src, "tbl", tbl, "dur", dur.String())
+	slog.Info("timing", "read", n, "inserted", inserted, "src", src, "tbl", tbl, "dur", dur.String())
 	return err
 }
 

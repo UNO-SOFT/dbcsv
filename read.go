@@ -151,9 +151,6 @@ func (cfg *Config) Rewind() error {
 	if cfg.file == nil {
 		panic("file is nil")
 	}
-	if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
-		slog.Debug("Rewind", "file", fmt.Sprintf("%+v", cfg.file))
-	}
 	if cfg.zr != nil {
 		cfg.zr.Close()
 	}
@@ -168,9 +165,6 @@ func (cfg *Config) Rewind() error {
 			cfg.zr = zr
 			cfg.rdr = zr.IOReadCloser()
 		}
-	}
-	if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
-		slog.Debug("Rewind", "file", fmt.Sprintf("%+v", cfg.file))
 	}
 	return nil
 }
