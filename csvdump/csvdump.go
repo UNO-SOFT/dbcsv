@@ -36,24 +36,21 @@ import (
 	"github.com/UNO-SOFT/spreadsheet/xlsx"
 
 	"github.com/UNO-SOFT/zlog/v2"
-	"golang.org/x/exp/slog"
 )
 
 var (
 	verbose zlog.VerboseVar
-	logger  = zlog.NewLogger(zlog.MaybeConsoleHandler(&verbose, os.Stderr))
+	logger  = zlog.NewLogger(zlog.MaybeConsoleHandler(&verbose, os.Stderr)).SLog()
 )
 
 func main() {
 	if err := Main(); err != nil {
-		slog.Error("Main", "error", err)
+		logger.Error("Main", "error", err)
 		os.Exit(1)
 	}
 }
 
 func Main() error {
-	slog.SetDefault(logger.SLog())
-
 	flagConnect := flag.String("connect", os.Getenv("DB_ID"), "user/passw@sid to connect to")
 	flagDateFormat := flag.String("date", "2006-01-02T15:04:05", "date format, in Go notation")
 	flagSep := flag.String("sep", ",", "separator")
@@ -185,7 +182,7 @@ and dump all the columns of the cursor returned by the function.
 		ctx, cancel = context.WithTimeout(ctx, *flagTimeout)
 		defer cancel()
 	}
-	ctx = zlog.NewContext(ctx, logger)
+	ctx = zlog.NewSContext(ctx, logger)
 
 	fh := interface {
 		io.WriteCloser
@@ -297,7 +294,7 @@ and dump all the columns of the cursor returned by the function.
 				break
 			}
 			grp.Go(func() error {
-				slog.Debug("DumpSheet", "name", name, "qry", qry)
+				logger.Debug("DumpSheet", "name", name, "qry", qry)
 				err := dbcsv.DumpSheet(grpCtx, sheet, rows, columns)
 				rows.Close()
 				if closeErr := sheet.Close(); closeErr != nil && err == nil {
@@ -381,7 +378,7 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 		if _, err = db.ExecContext(ctx, qry, params...); err == nil {
 			rows, err = godror.WrapRows(ctx, db, dRows)
 		} else {
-			slog.Error("call", "qry", qry, "params", fmt.Sprintf("%#v", params), "error", err)
+			logger.Error("call", "qry", qry, "params", fmt.Sprintf("%#v", params), "error", err)
 		}
 	} else {
 		origQry := qry
@@ -457,7 +454,7 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 		return nil, nil, fmt.Errorf("%q: %w", qry, err)
 	}
 	columns, err := dbcsv.GetColumns(ctx, rows)
-	slog.Info("GetColumns", "columns", columns)
+	logger.Info("GetColumns", "columns", columns)
 	if err != nil {
 		rows.Close()
 		return nil, nil, err
@@ -488,7 +485,7 @@ func splitParamArgs(fun string, args []string) (plsql string, params []interface
 		buf.WriteByte(')')
 	}
 	buf.WriteString("; END;")
-	slog.Info("splitParamArgs", "fun", fun, "args", args, "qry", buf.String(), "params", params)
+	logger.Info("splitParamArgs", "fun", fun, "args", args, "qry", buf.String(), "params", params)
 	return buf.String(), params
 }
 

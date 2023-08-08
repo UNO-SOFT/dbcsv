@@ -17,8 +17,8 @@ import (
 )
 
 func TestRemote(t *testing.T) {
-	logger = zlog.NewT(t)
-	ctx := zlog.NewContext(context.Background(), logger)
+	logger = zlog.NewT(t).SLog()
+	ctx := zlog.NewSContext(context.Background(), logger)
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	var buf bytes.Buffer

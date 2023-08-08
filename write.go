@@ -18,10 +18,9 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/exp/slog"
-
 	"github.com/UNO-SOFT/spreadsheet"
 	"github.com/UNO-SOFT/zlog/v2"
+	"github.com/UNO-SOFT/zlog/v2/slog"
 
 	"github.com/godror/godror"
 )

@@ -1,6 +1,8 @@
 module github.com/UNO-SOFT/dbcsv
 
-go 1.17
+go 1.21
+
+toolchain go1.21.0
 
 require (
 	github.com/UNO-SOFT/spreadsheet v0.1.7
@@ -17,11 +19,11 @@ require (
 )
 
 require (
-	github.com/UNO-SOFT/zlog v0.6.3
+	github.com/UNO-SOFT/zlog v0.7.2
 	github.com/google/go-cmp v0.5.9
 	github.com/google/renameio/v2 v2.0.0
 	github.com/xuri/excelize/v2 v2.7.1
-	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1
+	golang.org/x/exp v0.0.0-20230713183714-613f0c0eb8a1
 )
 
 require (
@@ -35,8 +37,8 @@ require (
 	github.com/valyala/quicktemplate v1.7.0 // indirect
 	github.com/xuri/efp v0.0.0-20230422071738-01f4e37c47e9 // indirect
 	github.com/xuri/nfp v0.0.0-20230503010013-3f38cdbb0b83 // indirect
-	golang.org/x/sys v0.9.0 // indirect
-	golang.org/x/term v0.9.0 // indirect
+	golang.org/x/sys v0.10.0 // indirect
+	golang.org/x/term v0.10.0 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 )
 

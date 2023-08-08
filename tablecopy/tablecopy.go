@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/UNO-SOFT/zlog/v2"
+	"github.com/UNO-SOFT/zlog/v2/slog"
 	godror "github.com/godror/godror"
-	"golang.org/x/exp/slog"
 
 	"golang.org/x/sync/errgroup"
 )
