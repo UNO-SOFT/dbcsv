@@ -19,7 +19,7 @@ require (
 )
 
 require (
-	github.com/UNO-SOFT/zlog v0.7.2
+	github.com/UNO-SOFT/zlog v0.7.4
 	github.com/google/go-cmp v0.5.9
 	github.com/google/renameio/v2 v2.0.0
 	github.com/xuri/excelize/v2 v2.7.1
@@ -29,10 +29,14 @@ require (
 require (
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
 	github.com/go-logr/logr v1.2.4 // indirect
+	github.com/go-logr/zerologr v1.2.3 // indirect
 	github.com/godror/knownpb v0.1.1 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.17 // indirect
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
 	github.com/richardlehane/mscfb v1.0.4 // indirect
 	github.com/richardlehane/msoleps v1.0.3 // indirect
+	github.com/rs/zerolog v1.29.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/quicktemplate v1.7.0 // indirect
 	github.com/xuri/efp v0.0.0-20230802181842-ad255f2331ca // indirect
