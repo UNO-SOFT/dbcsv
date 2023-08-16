@@ -19,7 +19,7 @@ require (
 )
 
 require (
-	github.com/UNO-SOFT/zlog v0.7.4
+	github.com/UNO-SOFT/zlog v0.7.6
 	github.com/google/go-cmp v0.5.9
 	github.com/google/renameio/v2 v2.0.0
 	github.com/xuri/excelize/v2 v2.7.1
