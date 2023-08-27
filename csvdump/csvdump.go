@@ -145,7 +145,7 @@ and dump all the columns of the cursor returned by the function.
 	} else if *flagCall {
 		var qry string
 		qry, params = splitParamArgs(args[0], args[1:])
-		logger.Debug("call", qry, "params", params)
+		logger.Debug("call", "qry", qry, "params", params)
 		queries = append(queries, Query{Query: qry})
 	} else {
 		params = make([]interface{}, len(flagParams.Strings))

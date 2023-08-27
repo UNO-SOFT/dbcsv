@@ -729,7 +729,7 @@ func CreateTable(ctx context.Context, db *sql.DB, tbl string, rows <-chan dbcsv.
 			buf.WriteString(tablespace)
 		}
 		qry = buf.String()
-		logger.Info("qry", qry)
+		logger.Debug("exec", "qry", qry)
 		if _, err := db.Exec(qry); err != nil {
 			return cols, fmt.Errorf("%s: %w", qry, err)
 		}
