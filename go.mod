@@ -9,7 +9,7 @@ require (
 	github.com/extrame/goyymmdd v0.0.0-20210114090516-7cc815f00d1a // indirect
 	github.com/extrame/ole2 v0.0.0-20160812065207-d69429661ad7 // indirect
 	github.com/extrame/xls v0.0.2-0.20180905092746-539786826ced
-	github.com/godror/godror v0.37.0
+	github.com/godror/godror v0.40.2
 	github.com/klauspost/compress v1.16.7
 	github.com/peterbourgon/ff/v3 v3.3.0
 	golang.org/x/crypto v0.12.0 // indirect
@@ -23,7 +23,7 @@ require (
 	github.com/google/go-cmp v0.5.9
 	github.com/google/renameio/v2 v2.0.0
 	github.com/xuri/excelize/v2 v2.7.1
-	golang.org/x/exp v0.0.0-20230807204917-050eac23e9de
+	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63
 )
 
 require (
