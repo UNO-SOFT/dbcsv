@@ -62,9 +62,14 @@ func testClob2CSV(t *testing.T, db *sql.DB, s string) {
 	if !utf8.ValidString(s) {
 		return
 	}
+	// Convert back-and-forth UTF-8 -> ISO8859-2 -> UTF-8 to ensure that the string is OK.
 	encoded, err := encoding.ReplaceUnsupported(charmap.ISO8859_2.NewEncoder()).String(s)
 	if err != nil {
 		t.Logf("%q: %+v", s, err)
+		return
+	}
+	if s, err = charmap.ISO8859_2.NewDecoder().String(encoded); err != nil {
+		t.Logf("%q: %+v", encoded, err)
 		return
 	}
 	var buf bytes.Buffer
@@ -84,16 +89,22 @@ BEGIN
     v_rec := v_tab(v_tab.FIRST);
   END IF;
   :2 := v_rec;
+  :3 := v_tab.COUNT;
 END;`
 	var tt CsvRec
 	tt.Values = make([]string, len(want))
 	t.Logf("input[%d]: %q", buf.Len(), buf.String())
+	var gotLineNo int
 	if _, err := db.ExecContext(ctx, qry,
 		buf.String(),
 		sql.Out{Dest: &tt.Values},
+		sql.Out{Dest: &gotLineNo},
 		godror.PlSQLArrays,
 	); err != nil {
 		t.Fatalf("exec %s: %+v", qry, err)
+	}
+	if gotLineNo != 1 {
+		t.Errorf("got lineNo=%d, wanted 1", gotLineNo)
 	}
 	t.Logf("want: %q\ngot: %q", want, tt.Values)
 	if len(tt.Values) != len(want) {
