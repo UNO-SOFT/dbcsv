@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -226,6 +227,10 @@ and dump all the columns of the cursor returned by the function.
 		}
 	}
 	defer tx.Rollback()
+	if logger.Enabled(ctx, slog.LevelDebug) {
+		godror.SetLogger(logger.With("lib", "godror"))
+		defer godror.SetLogger(zlog.Discard().SLog())
+	}
 
 	if len(flagSheets.Strings) == 0 &&
 		!strings.HasSuffix(origFn, ".ods") &&

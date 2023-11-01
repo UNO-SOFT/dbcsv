@@ -792,7 +792,7 @@ func (t Type) String() string {
 }
 
 func (c Column) FromString(ss []string) (interface{}, error) {
-	if c.DataType == "DATE" || c.Type == Date {
+	if c.DataType == "DATE" || strings.HasPrefix(c.DataType, "TIMESTAMP") || c.Type == Date {
 		res := make([]sql.NullTime, len(ss))
 		for i, s := range ss {
 			if s == "" {
@@ -890,8 +890,8 @@ func getColumns(ctx context.Context, db *sql.DB, tbl string) ([]Column, error) {
 			return nil, err
 		}
 		c.Nullable = nullable == "Y"
-		switch c.DataType {
-		case "DATE":
+		switch x, _ := strings.CutPrefix(c.DataType, "("); x {
+		case "DATE", "TIMESTAMP":
 			c.Type = Date
 			c.Length = 8
 		case "NUMBER":

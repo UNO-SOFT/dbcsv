@@ -23,7 +23,7 @@ require (
 	github.com/google/go-cmp v0.5.9
 	github.com/google/renameio/v2 v2.0.0
 	github.com/xuri/excelize/v2 v2.7.1
-	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63
+	golang.org/x/exp v0.0.0-20230905200255-921286631fa9
 )
 
 require (
@@ -42,5 +42,5 @@ require (
 	google.golang.org/protobuf v1.31.0 // indirect
 )
 
-//replace github.com/godror/godror => ../../godror/godror
+// replace github.com/godror/godror => ../../godror/godror
 //replace github.com/UNO-SOFT/spreadsheet => ../../UNO-SOFT/spreadsheet
