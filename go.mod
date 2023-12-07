@@ -23,7 +23,7 @@ require (
 	github.com/google/go-cmp v0.5.9
 	github.com/google/renameio/v2 v2.0.0
 	github.com/xuri/excelize/v2 v2.8.0
-	golang.org/x/exp v0.0.0-20231127185646-65229373498e
+	golang.org/x/exp v0.0.0-20231206192017-f3f8817b8deb
 )
 
 require (
