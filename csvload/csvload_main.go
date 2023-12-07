@@ -9,6 +9,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base32"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -49,7 +50,7 @@ func main() {
 }
 
 var (
-	dateFormat = "2006-01-02 15:04:05"
+	dateFormat = "2006-01-02T15:04:05"
 	xlsEpoch   = time.Date(1899, 12, 30, 0, 0, 0, 0, time.Local)
 
 	ErrTooManyFields = errors.New("too many fields")
@@ -144,7 +145,7 @@ func Main() error {
 	flagMemProf := fs.String("memprofile", "", "file to output memory profile to")
 	flagCPUProf := fs.String("cpuprofile", "", "file to output CPU profile to")
 	app := ffcli.Command{Name: "csvload", FlagSet: fs, ShortUsage: "load from csv/xls/ods into database table",
-		Exec:        loadCmd.Exec,
+		Exec:        func(ctx context.Context, args []string) error { return loadCmd.Exec(ctx, args) },
 		Subcommands: []*ffcli.Command{&loadCmd, &sheetCmd},
 	}
 
@@ -861,6 +862,12 @@ func (c Column) FromString(ss []string) (interface{}, error) {
 		isClob := c.DataType == tCLOB
 		res := make([]godror.Lob, len(ss))
 		for i, s := range ss {
+			if !isClob {
+				if b, err := hex.DecodeString(s); err == nil {
+					res[i] = godror.Lob{IsClob: false, Reader: bytes.NewReader(b)}
+					continue
+				}
+			}
 			res[i] = godror.Lob{IsClob: isClob, Reader: strings.NewReader(s)}
 		}
 		return res, nil
