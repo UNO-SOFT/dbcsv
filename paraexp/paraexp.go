@@ -65,7 +65,9 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 		flag.PrintDefaults()
 	}
 	if *flagConnect == "" {
-		*flagConnect = os.Getenv("BRUNO_ID")
+		if *flagConnect = os.Getenv("BRUNO_OWNER_ID"); *flagConnect == "" {
+			*flagConnect = os.Getenv("BRUNO_ID")
+		}
 	}
 	flag.Parse()
 

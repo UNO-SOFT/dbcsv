@@ -85,7 +85,9 @@ and dump all the columns of the cursor returned by the function.
 		flag.PrintDefaults()
 	}
 	if *flagConnect == "" {
-		*flagConnect = os.Getenv("BRUNO_ID")
+		if *flagConnect = os.Getenv("BRUNO_OWNER_ID"); *flagConnect == "" {
+			*flagConnect = os.Getenv("BRUNO_ID")
+		}
 	}
 	flag.Parse()
 

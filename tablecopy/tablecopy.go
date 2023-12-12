@@ -68,11 +68,15 @@ will execute a "SELECT * FROM Source_table@source_db WHERE F_ield=1" and an "INS
 `, "{{.prog}}", os.Args[0], -1))
 		flag.PrintDefaults()
 	}
+	brID := os.Getenv("BRUNO_OWNER_ID")
+	if brID == "" {
+		brID = os.Getenv("BRUNO_ID")
+	}
 	if *flagSource == "" {
-		*flagSource = os.Getenv("BRUNO_ID")
+		*flagSource = brID
 	}
 	if *flagDest == "" {
-		*flagDest = os.Getenv("BRUNO_ID")
+		*flagDest = brID
 	}
 	flag.Parse()
 	if *flagTimeout == 0 {

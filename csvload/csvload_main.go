@@ -88,7 +88,9 @@ func Main() error {
 	fs.Var(&verbose, "v", "verbose logging")
 	fs.BoolVar(&cfg.LobSource, "lob", false, "source is not a filename but a query that returns a LOB")
 	if *flagConnect == "" {
-		*flagConnect = os.Getenv("BRUNO_ID")
+		if *flagConnect = os.Getenv("BRUNO_OWNER_ID"); *flagConnect == "" {
+			*flagConnect = os.Getenv("BRUNO_ID")
+		}
 	}
 	loadCmd := ffcli.Command{Name: "load", FlagSet: fs,
 		Exec: func(ctx context.Context, args []string) error {
