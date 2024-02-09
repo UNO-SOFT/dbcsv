@@ -10,7 +10,6 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -204,9 +203,9 @@ and dump all the columns of the cursor returned by the function.
 		fh = pfh
 		origFn = *flagOut
 	}
-	if *flagRemote && !strings.HasSuffix(origFn, ".xlsx") {
-		return errors.New("-remote flag works only for xlsx")
-	}
+	// if *flagRemote && !strings.HasSuffix(origFn, ".xlsx") {
+	// 	return errors.New("-remote flag works only for xlsx")
+	// }
 	wfh := io.WriteCloser(fh)
 	if *flagCompress != "" {
 		switch (strings.TrimSpace(strings.ToLower(*flagCompress)) + "  ")[:2] {
@@ -245,7 +244,14 @@ and dump all the columns of the cursor returned by the function.
 			err = qErr
 		} else {
 			defer rows.Close()
-			err = dbcsv.DumpCSV(ctx, w, rows, columns, *flagHeader, *flagSep, *flagRaw)
+			if *flagRemote {
+				if len(columns) != 1 {
+					return fmt.Errorf("-remote wants the queries to have only one column, this has %d", len(columns))
+				}
+				err = dumpRemoteCSV(ctx, w, rows, *flagSep)
+			} else {
+				err = dbcsv.DumpCSV(ctx, w, rows, columns, *flagHeader, *flagSep, *flagRaw)
+			}
 		}
 	} else {
 		var w spreadsheet.Writer

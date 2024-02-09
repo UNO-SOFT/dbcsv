@@ -6,7 +6,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"database/sql"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -248,4 +251,45 @@ func (c command) checkArgs(types string) error {
 		}
 	}
 	return nil
+}
+
+func dumpRemoteCSV(ctx context.Context, w io.Writer, rows *sql.Rows, sep string) error {
+	cw := csv.NewWriter(w)
+	if sep != "" {
+		cw.Comma = ([]rune(sep))[0]
+	}
+
+	var buf bytes.Buffer
+	dec := json.NewDecoder(&buf)
+	var strs []string
+	var arr []any
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return fmt.Errorf("Scan: %w", err)
+		}
+		buf.Reset()
+		buf.WriteString(s)
+		strs = strs[:0]
+		if err := dec.Decode(&strs); err != nil {
+			arr = arr[:0]
+			buf.Reset()
+			buf.WriteString(s)
+			if err = dec.Decode(&arr); err != nil {
+				return fmt.Errorf("decode %q into []any: %w", s, err)
+			}
+			for _, a := range arr {
+				strs = append(strs, fmt.Sprintf("%v", a))
+			}
+		}
+		if err := cw.Write(strs); err != nil {
+			return err
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+
+	cw.Flush()
+	return cw.Error()
 }
