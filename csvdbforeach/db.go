@@ -23,12 +23,23 @@ const (
 	DateTimeFormat = "20060102150405"
 )
 
+func safeConvert(conv func(string) (interface{}, error), s string) (v interface{}, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			var ok bool
+			if err, ok = r.(error); !ok {
+				err = fmt.Errorf("PANIC: %v", r)
+			}
+		}
+	}()
+	return conv(s)
+}
+
 func dbExec(db *sql.DB, fun string, fixParams [][2]string, retOk int64, rows <-chan dbcsv.Row, oneTx bool) (int, error) {
 	st, err := getQuery(db, fun, fixParams)
 	if err != nil {
 		return 0, err
 	}
-	log.Printf("st=%#v", st)
 	var (
 		stmt     *sql.Stmt
 		tx       *sql.Tx
@@ -67,7 +78,7 @@ func dbExec(db *sql.DB, fun string, fixParams [][2]string, retOk int64, rows <-c
 				values = append(values, s)
 				continue
 			}
-			v, convErr := conv(s)
+			v, convErr := safeConvert(conv, s)
 			if convErr != nil {
 				log.Printf("row=%#v error=%v", row, convErr)
 				return n, fmt.Errorf("convert %q (row %d, col %d): %w", s, row.Line, i+1, convErr)
