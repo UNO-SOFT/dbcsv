@@ -285,7 +285,11 @@ func strToDate(s string) (interface{}, error) {
 	}
 	var buf strings.Builder
 	buf.Grow(14)
-	for i, f := range strings.FieldsFunc(s, func(r rune) bool { return !('0' <= r && r <= '9') }) {
+	fields := strings.FieldsFunc(s, func(r rune) bool { return !('0' <= r && r <= '9') })
+	if len(fields) >= 3 && len(fields[0]) < 4 && len(fields[2]) == 4 { // mm/dd/yyyy
+		fields[0], fields[1], fields[2] = fields[2], fields[0], fields[1]
+	}
+	for i, f := range fields {
 		reqLen := 2
 		if i == 0 {
 			reqLen = 4
