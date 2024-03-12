@@ -280,17 +280,35 @@ type Arg struct {
 }
 
 func strToDate(s string) (interface{}, error) {
-	s = justNums(s, 14)
-	if s == "" {
+	if justNums(s, 14) == "" {
 		return nil, nil
 	}
-	var t time.Time
-	var err error
-	if len(s) < 14 {
-		t, err = time.ParseInLocation(DateFormat, s[:8], time.Local)
-	} else {
-		t, err = time.ParseInLocation(DateTimeFormat, s, time.Local)
+	var buf strings.Builder
+	buf.Grow(14)
+	for i, f := range strings.FieldsFunc(s, func(r rune) bool { return !('0' <= r && r <= '9') }) {
+		reqLen := 2
+		if i == 0 {
+			reqLen = 4
+		}
+		for j := reqLen - len(f); j > 0; j-- {
+			buf.WriteByte('0')
+		}
+		buf.WriteString(f)
 	}
+	s = buf.String()
+	if len(s) > 14 {
+		s = s[:14]
+	}
+	format := DateTimeFormat
+	if length := len(s); length < len(format) {
+		if length < len(DateFormat) {
+			return sql.NullTime{}, fmt.Errorf("date %q too short", s)
+		} else if length > len(DateFormat) {
+			s = s[:8]
+		}
+		format = DateFormat
+	}
+	t, err := time.ParseInLocation(format, s, time.Local)
 	if err != nil {
 		return sql.NullTime{}, err
 	}
