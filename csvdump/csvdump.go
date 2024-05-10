@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/text/encoding"
@@ -67,6 +68,7 @@ func Main() error {
 	flagCompress := flag.String("compress", "", "compress output with gz/gzip or zst/zstd/zstandard")
 	flagCall := flag.Bool("call", false, "the first argument is not the WHERE, but the PL/SQL block to be called, the followings are not the columns but the arguments")
 	flagRemote := flag.Bool("remote", false, `the rows are XLSX commands in JSON {"c":"command_name", "a":[{"f":"float_value","s":"string_value", "i":"int_value"}]} format`)
+	flagAQ := flag.Bool("aq", false, "get the remote commands from AQ/objectTypeName/correlation")
 	flagTimeout := flag.Duration("timeout", 0, "timeout")
 
 	flag.Usage = func() {
@@ -119,12 +121,24 @@ and dump all the columns of the cursor returned by the function.
 		"05", "59",
 	).Replace(dbcsv.DateFormat) + `"`
 
-	type Query struct {
-		Query, Name string
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+	if *flagTimeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, *flagTimeout)
+		defer cancel()
 	}
+	ctx = zlog.NewSContext(ctx, logger)
 
 	var queries []Query
 	var params []interface{}
+	db, err := sql.Open("godror", *flagConnect)
+	if err != nil {
+		return fmt.Errorf("%s: %w", *flagConnect, err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(2)
+	db.SetMaxIdleConns(1)
+
 	logger.Debug("flags", "sheets", flagSheets.Strings, "call", *flagCall, "args", args)
 	if len(flagSheets.Strings) != 0 {
 		queries = make([]Query, len(flagSheets.Strings))
@@ -135,7 +149,21 @@ and dump all the columns of the cursor returned by the function.
 				queries[i] = Query{Query: q}
 			}
 		}
-		if *flagCall {
+		if *flagAQ {
+			Q := queries[0]
+			Q.ParseQueue()
+			queries[0] = Q
+			for i, q := range queries[1:] {
+				q.ParseQueue()
+				if q.QueueName == "" {
+					q.QueueName = Q.QueueName
+				}
+				if q.TypeName == "" && q.QueueName == Q.QueueName {
+					q.TypeName = Q.TypeName
+				}
+				queries[i+1] = q
+			}
+		} else if *flagCall {
 			Q := queries[0]
 			Q.Query, params = splitParamArgs(Q.Query, args)
 			queries[0] = Q
@@ -149,6 +177,10 @@ and dump all the columns of the cursor returned by the function.
 		qry, params = splitParamArgs(args[0], args[1:])
 		logger.Debug("call", "qry", qry, "params", params)
 		queries = append(queries, Query{Query: qry})
+	} else if *flagAQ {
+		Q := Query{Query: args[0]}
+		Q.ParseQueue()
+		queries = append(queries, Q)
 	} else {
 		params = make([]interface{}, len(flagParams.Strings))
 		for i, p := range flagParams.Strings {
@@ -170,21 +202,6 @@ and dump all the columns of the cursor returned by the function.
 		qry = getQuery(qry, where, columns, dbcsv.DefaultEncoding)
 		queries = append(queries, Query{Query: qry})
 	}
-	db, err := sql.Open("godror", *flagConnect)
-	if err != nil {
-		return fmt.Errorf("%s: %w", *flagConnect, err)
-	}
-	defer db.Close()
-	db.SetMaxOpenConns(2)
-	db.SetMaxIdleConns(1)
-
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer cancel()
-	if *flagTimeout > 0 {
-		ctx, cancel = context.WithTimeout(ctx, *flagTimeout)
-		defer cancel()
-	}
-	ctx = zlog.NewSContext(ctx, logger)
 
 	fh := interface {
 		io.WriteCloser
@@ -203,9 +220,6 @@ and dump all the columns of the cursor returned by the function.
 		fh = pfh
 		origFn = *flagOut
 	}
-	// if *flagRemote && !strings.HasSuffix(origFn, ".xlsx") {
-	// 	return errors.New("-remote flag works only for xlsx")
-	// }
 	wfh := io.WriteCloser(fh)
 	if *flagCompress != "" {
 		switch (strings.TrimSpace(strings.ToLower(*flagCompress)) + "  ")[:2] {
@@ -239,18 +253,27 @@ and dump all the columns of the cursor returned by the function.
 		w := encoding.ReplaceUnsupported(enc.NewEncoder()).Writer(wfh)
 		logger.Debug("encoding", "env", dbcsv.DefaultEncoding.Name)
 
-		rows, columns, qErr := doQuery(ctx, tx, queries[0].Query, params, *flagCall, *flagSort)
-		if qErr != nil {
-			err = qErr
+		if queries[0].QueueName != "" {
+			Q, err := queries[0].OpenQueue(ctx, db)
+			if err != nil {
+				return err
+			}
+			defer Q.Close()
+			err = dumpRemoteCSVQueue(ctx, w, Q, *flagSep)
 		} else {
-			defer rows.Close()
-			if *flagRemote {
-				if len(columns) != 1 {
-					return fmt.Errorf("-remote wants the queries to have only one column, this has %d", len(columns))
-				}
-				err = dumpRemoteCSV(ctx, w, rows, *flagSep)
+			rows, columns, qErr := doQuery(ctx, tx, queries[0].Query, params, *flagCall, *flagSort)
+			if qErr != nil {
+				err = qErr
 			} else {
-				err = dbcsv.DumpCSV(ctx, w, rows, columns, *flagHeader, *flagSep, *flagRaw)
+				defer rows.Close()
+				if *flagRemote {
+					if len(columns) != 1 {
+						return fmt.Errorf("-remote wants the queries to have only one column, this has %d", len(columns))
+					}
+					err = dumpRemoteCSV(ctx, w, rows, *flagSep)
+				} else {
+					err = dbcsv.DumpCSV(ctx, w, rows, columns, *flagHeader, *flagSep, *flagRaw)
+				}
 			}
 		}
 	} else {
@@ -267,12 +290,28 @@ and dump all the columns of the cursor returned by the function.
 			}
 			defer w.Close()
 		}
+
 		grp, grpCtx := errgroup.WithContext(ctx)
 		for sheetNo := range queries {
 			qry, name := queries[sheetNo].Query, queries[sheetNo].Name
 			if name == "" {
 				name = strconv.Itoa(sheetNo + 1)
 			}
+			if *flagAQ {
+				Q, err := queries[sheetNo].OpenQueue(ctx, db)
+				if err != nil {
+					return err
+				}
+				defer Q.Close()
+
+				err = executeCommands(ctx, wfh, queueNext(grpCtx, Q))
+				Q.Close()
+				if err != nil {
+					break
+				}
+				continue
+			}
+
 			rows, columns, qErr := doQuery(grpCtx, tx, qry, params, *flagCall, *flagSort)
 			if qErr != nil {
 				err = qErr
@@ -282,13 +321,13 @@ and dump all the columns of the cursor returned by the function.
 				if len(columns) != 1 {
 					return fmt.Errorf("-remote wants the queries to have only one column, %q has %d", name, len(columns))
 				}
-				if err = executeCommands(ctx, wfh, func() (string, error) {
+				if err = executeCommands(ctx, wfh, func() ([]byte, error) {
 					if !rows.Next() {
-						return "", io.EOF
+						return nil, io.EOF
 					}
 					var s string
 					err := rows.Scan(&s)
-					return s, err
+					return []byte(s), err
 				}); err != nil {
 					break
 				}
@@ -500,6 +539,45 @@ func splitParamArgs(fun string, args []string) (plsql string, params []interface
 	buf.WriteString("; END;")
 	logger.Info("splitParamArgs", "fun", fun, "args", args, "qry", buf.String(), "params", params)
 	return buf.String(), params
+}
+
+type Query struct {
+	Query, Name                      string
+	QueueName, TypeName, Correlation string
+}
+
+func (Q *Query) ParseQueue() {
+	cut := func(s string) (prefix, suffix string, found bool) {
+		const sepChars = "/"
+		i := strings.IndexAny(s, sepChars)
+		if i < 0 {
+			return s, "", false
+		}
+		return s[:i], strings.TrimLeftFunc(s[i+1:], func(r rune) bool { return strings.ContainsRune(sepChars, r) }), true
+	}
+	var found bool
+	s := Q.Query
+	Q.QueueName, s, found = cut(s)
+	if found {
+		if Q.TypeName, Q.Correlation, found = cut(s); !found {
+			Q.TypeName, Q.Correlation = Q.Correlation, Q.TypeName
+		}
+	}
+	if Q.TypeName == "" && Q.QueueName != "" {
+		// Q_WSC_REQ -> TYP_Q_WSC_REQ
+		Q.TypeName = "TYP_" + Q.QueueName
+	}
+	logger.Debug("NewQueue", "aqName", Q.QueueName, "typName", Q.TypeName, "correlation", Q.Correlation)
+}
+
+func (Q *Query) OpenQueue(ctx context.Context, db *sql.DB) (*godror.Queue, error) {
+	return godror.NewQueue(ctx, db, Q.QueueName, Q.TypeName, godror.WithDeqOptions(godror.DeqOptions{
+		Mode:        godror.DeqRemove,
+		Navigation:  godror.NavFirst,
+		Visibility:  godror.VisibleImmediate,
+		Correlation: Q.Correlation,
+		Wait:        time.Second,
+	}))
 }
 
 // vim: se noet fileencoding=utf-8:

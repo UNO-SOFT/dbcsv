@@ -6,7 +6,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/csv"
@@ -14,12 +13,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strconv"
 	"time"
 
 	"github.com/xuri/excelize/v2"
-
-	"golang.org/x/exp/slog"
 )
 
 type command struct {
@@ -56,7 +54,7 @@ func (c *coordinate) String() string {
 	return colName(c.Col) + strconv.Itoa(c.Row)
 }
 
-func executeCommands(ctx context.Context, w io.Writer, next func() (string, error)) error {
+func executeCommands(ctx context.Context, w io.Writer, next func() ([]byte, error)) error {
 	f := excelize.NewFile()
 	defer f.Close()
 	styles := make(map[string]int)
@@ -73,6 +71,7 @@ func executeCommands(ctx context.Context, w io.Writer, next func() (string, erro
 			}
 			return err
 		}
+
 		var c command
 		if err = json.Unmarshal([]byte(s), &c); err != nil {
 			return fmt.Errorf("unmarshal %q: %w", s, err)
@@ -254,29 +253,44 @@ func (c command) checkArgs(types string) error {
 }
 
 func dumpRemoteCSV(ctx context.Context, w io.Writer, rows *sql.Rows, sep string) error {
+	return remoteCSV(ctx, w, sep, func() ([]byte, error) {
+		if !rows.Next() {
+			err := rows.Close()
+			if err == nil {
+				err = rows.Err()
+			}
+			if err == nil {
+				err = io.EOF
+			}
+			return nil, err
+		}
+		var s string
+		err := rows.Scan(&s)
+		return []byte(s), err
+	})
+}
+
+func remoteCSV(ctx context.Context, w io.Writer, sep string, next func() ([]byte, error)) error {
+	var strs []string
+	var arr []any
 	cw := csv.NewWriter(w)
 	if sep != "" {
 		cw.Comma = ([]rune(sep))[0]
 	}
 
-	var buf bytes.Buffer
-	dec := json.NewDecoder(&buf)
-	var strs []string
-	var arr []any
-	for rows.Next() {
-		var s string
-		if err := rows.Scan(&s); err != nil {
-			return fmt.Errorf("Scan: %w", err)
+	for {
+		data, err := next()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
 		}
-		buf.Reset()
-		buf.WriteString(s)
 		strs = strs[:0]
-		if err := dec.Decode(&strs); err != nil {
+		if err := json.Unmarshal(data, &strs); err != nil {
 			arr = arr[:0]
-			buf.Reset()
-			buf.WriteString(s)
-			if err = dec.Decode(&arr); err != nil {
-				return fmt.Errorf("decode %q into []any: %w", s, err)
+			if err = json.Unmarshal(data, &arr); err != nil {
+				return fmt.Errorf("decode %q into []any: %w", string(data), err)
 			}
 			for _, a := range arr {
 				strs = append(strs, fmt.Sprintf("%v", a))
@@ -285,9 +299,6 @@ func dumpRemoteCSV(ctx context.Context, w io.Writer, rows *sql.Rows, sep string)
 		if err := cw.Write(strs); err != nil {
 			return err
 		}
-	}
-	if err := rows.Close(); err != nil {
-		return err
 	}
 
 	cw.Flush()
