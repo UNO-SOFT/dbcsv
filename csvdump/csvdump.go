@@ -20,7 +20,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/text/encoding"
@@ -68,7 +67,7 @@ func Main() error {
 	flagCompress := flag.String("compress", "", "compress output with gz/gzip or zst/zstd/zstandard")
 	flagCall := flag.Bool("call", false, "the first argument is not the WHERE, but the PL/SQL block to be called, the followings are not the columns but the arguments")
 	flagRemote := flag.Bool("remote", false, `the rows are XLSX commands in JSON {"c":"command_name", "a":[{"f":"float_value","s":"string_value", "i":"int_value"}]} format`)
-	flagAQ := flag.Bool("aq", false, "get the remote commands from AQ/objectTypeName/correlation")
+	flagAQ := flag.Bool("aq", false, "get the remote commands from AQ/correlation")
 	flagTimeout := flag.Duration("timeout", 0, "timeout")
 
 	flag.Usage = func() {
@@ -157,9 +156,6 @@ and dump all the columns of the cursor returned by the function.
 				q.ParseQueue()
 				if q.QueueName == "" {
 					q.QueueName = Q.QueueName
-				}
-				if q.TypeName == "" && q.QueueName == Q.QueueName {
-					q.TypeName = Q.TypeName
 				}
 				queries[i+1] = q
 			}
@@ -254,7 +250,7 @@ and dump all the columns of the cursor returned by the function.
 		logger.Debug("encoding", "env", dbcsv.DefaultEncoding.Name)
 
 		if queries[0].QueueName != "" {
-			Q, err := queries[0].OpenQueue(ctx, db)
+			Q, err := queries[0].OpenQueue(ctx, tx)
 			if err != nil {
 				return err
 			}
@@ -298,7 +294,7 @@ and dump all the columns of the cursor returned by the function.
 				name = strconv.Itoa(sheetNo + 1)
 			}
 			if *flagAQ {
-				Q, err := queries[sheetNo].OpenQueue(ctx, db)
+				Q, err := queries[sheetNo].OpenQueue(ctx, tx)
 				if err != nil {
 					return err
 				}
@@ -542,42 +538,8 @@ func splitParamArgs(fun string, args []string) (plsql string, params []interface
 }
 
 type Query struct {
-	Query, Name                      string
-	QueueName, TypeName, Correlation string
-}
-
-func (Q *Query) ParseQueue() {
-	cut := func(s string) (prefix, suffix string, found bool) {
-		const sepChars = "/"
-		i := strings.IndexAny(s, sepChars)
-		if i < 0 {
-			return s, "", false
-		}
-		return s[:i], strings.TrimLeftFunc(s[i+1:], func(r rune) bool { return strings.ContainsRune(sepChars, r) }), true
-	}
-	var found bool
-	s := Q.Query
-	Q.QueueName, s, found = cut(s)
-	if found {
-		if Q.TypeName, Q.Correlation, found = cut(s); !found {
-			Q.TypeName, Q.Correlation = Q.Correlation, Q.TypeName
-		}
-	}
-	if Q.TypeName == "" && Q.QueueName != "" {
-		// Q_WSC_REQ -> TYP_Q_WSC_REQ
-		Q.TypeName = "TYP_" + Q.QueueName
-	}
-	logger.Debug("NewQueue", "aqName", Q.QueueName, "typName", Q.TypeName, "correlation", Q.Correlation)
-}
-
-func (Q *Query) OpenQueue(ctx context.Context, db *sql.DB) (*godror.Queue, error) {
-	return godror.NewQueue(ctx, db, Q.QueueName, Q.TypeName, godror.WithDeqOptions(godror.DeqOptions{
-		Mode:        godror.DeqRemove,
-		Navigation:  godror.NavFirst,
-		Visibility:  godror.VisibleImmediate,
-		Correlation: Q.Correlation,
-		Wait:        time.Second,
-	}))
+	Query, Name            string
+	QueueName, Correlation string
 }
 
 // vim: se noet fileencoding=utf-8:
