@@ -14,6 +14,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -33,12 +34,12 @@ var (
 	stderr = io.Writer(os.Stderr)
 
 	verbose zlog.VerboseVar
-	logger  = zlog.NewLogger(zlog.MaybeConsoleHandler(&verbose, os.Stderr))
+	logger  = zlog.NewLogger(zlog.MaybeConsoleHandler(&verbose, os.Stderr)).SLog()
 )
 
 func main() {
 	if err := Main(); err != nil {
-		logger.Error(err, "Main")
+		logger.Error("Main", "error", err)
 		os.Exit(1)
 	}
 }
@@ -94,6 +95,8 @@ Usage:
 		return errors.New("one argument: the filename is needed")
 	}
 
+	slog.SetDefault(logger)
+
 	ctxData := struct {
 		FileName string
 	}{FileName: flag.Arg(0)}
@@ -124,7 +127,7 @@ Usage:
 		defer errWg.Done()
 		for err := range errch {
 			if err != nil {
-				logger.Error(err, "ERROR")
+				logger.Error("got", "ERROR", "err")
 				errs = append(errs, err.Error())
 			}
 		}
@@ -206,7 +209,7 @@ Usage:
 	if len(errs) > 0 {
 		return fmt.Errorf("ERRORS:\n\t" + strings.Join(errs, "\n\t"))
 	}
-	logger.V(1).Info("processed", "rows", n, "dur", d.String())
+	logger.Debug("processed", "rows", n, "dur", d.String())
 	return nil
 }
 

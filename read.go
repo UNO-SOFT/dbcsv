@@ -14,12 +14,12 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"golang.org/x/exp/slog"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/encoding/htmlindex"
@@ -308,7 +308,7 @@ func (cfg *Config) ReadRows(ctx context.Context, fn func(context.Context, string
 		panic("file is nil")
 	}
 	if err = ctx.Err(); err != nil {
-		log.Printf("ctx: %+v", err)
+		slog.Error("ReadRows", "ctx", ctx, "error", err)
 		return err
 	}
 	if err := cfg.parseColumnsString(); err != nil {
@@ -318,6 +318,7 @@ func (cfg *Config) ReadRows(ctx context.Context, fn func(context.Context, string
 	if err := cfg.Rewind(); err != nil {
 		return fmt.Errorf("rewind: %w", err)
 	}
+	slog.Debug("ReadRows", "columns", cfg.columns, "columnsString", cfg.ColumnsString, "type", cfg.typ.Type, "delim", cfg.Delim)
 	switch cfg.typ.Type {
 	case Xls:
 		return ReadXLSFile(ctx, fn, cfg.fileName, cfg.Charset, cfg.Sheet, cfg.columns, cfg.Skip)
