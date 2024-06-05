@@ -606,7 +606,7 @@ func ReadCSV(ctx context.Context, fn func(context.Context, Row) error, r io.Read
 	cr.Comma = ([]rune(delim))[0]
 	cr.FieldsPerRecord = -1
 	cr.LazyQuotes = true
-	cr.ReuseRecord = true
+	cr.ReuseRecord = false // !!! data race of not false !!!
 	var colNames []string
 	n := 0
 	for {
