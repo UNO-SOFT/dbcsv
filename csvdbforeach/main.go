@@ -6,7 +6,6 @@ package main
 
 // nosemgrep: go.lang.security.audit.xss.import-text-template.import-text-template
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"database/sql"
@@ -14,16 +13,18 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
-	"sync"
 	"text/template"
 	"time"
 
-	"github.com/UNO-SOFT/dbcsv"
-	"github.com/UNO-SOFT/zlog/v2"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/text/encoding/htmlindex"
 	"golang.org/x/text/transform"
+
+	"github.com/UNO-SOFT/dbcsv"
+	"github.com/UNO-SOFT/zlog/v2"
 
 	_ "github.com/godror/godror"
 )
@@ -33,12 +34,12 @@ var (
 	stderr = io.Writer(os.Stderr)
 
 	verbose zlog.VerboseVar
-	logger  = zlog.NewLogger(zlog.MaybeConsoleHandler(&verbose, os.Stderr))
+	logger  = zlog.NewLogger(zlog.MaybeConsoleHandler(&verbose, os.Stderr)).SLog()
 )
 
 func main() {
 	if err := Main(); err != nil {
-		logger.Error(err, "Main")
+		logger.Error("Main", "error", err)
 		os.Exit(1)
 	}
 }
@@ -55,9 +56,6 @@ func Main() error {
 			stderr = transform.NewWriter(stderr, enc.NewEncoder())
 		}
 	}
-	bw := bufio.NewWriter(stdout)
-	defer bw.Flush()
-	stdout = bw
 
 	var cfg dbcsv.Config
 	flag.IntVar(&cfg.Sheet, "sheet", 0, "Index of sheet to convert, zero based")
@@ -94,6 +92,8 @@ Usage:
 		return errors.New("one argument: the filename is needed")
 	}
 
+	slog.SetDefault(logger)
+
 	ctxData := struct {
 		FileName string
 	}{FileName: flag.Arg(0)}
@@ -115,77 +115,53 @@ Usage:
 		return err
 	}
 
-	rows := make(chan dbcsv.Row, 8)
-	errch := make(chan error, 8)
-	errs := make([]string, 0, 8)
-	var errWg sync.WaitGroup
-	errWg.Add(1)
-	go func() {
-		defer errWg.Done()
-		for err := range errch {
-			if err != nil {
-				logger.Error(err, "ERROR")
-				errs = append(errs, err.Error())
-			}
-		}
-	}()
-
-	ctx, cancel := dbcsv.Wrap(context.Background())
-	defer cancel()
-	go func(rows chan<- dbcsv.Row) {
-		defer close(rows)
-		errch <- cfg.ReadRows(ctx,
-			func(ctx context.Context, _ string, row dbcsv.Row) error {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case rows <- row:
-				}
-				return nil
-			},
-		)
-	}(rows)
-
-	// filter out empty rows
-	{
-		filtered := make(chan dbcsv.Row, 8)
-		go func(filtered chan<- dbcsv.Row, rows <-chan dbcsv.Row) {
-			defer close(filtered)
-			for row := range rows {
-				for _, s := range row.Values {
-					if s != "" {
-						filtered <- row
-						break
-					}
-				}
-			}
-		}(filtered, rows)
-		rows = filtered
-	}
-
 	columns, err := cfg.Columns()
 	if err != nil {
 		return err
 	}
-	if len(columns) > 0 {
-		// change column order
-		filtered := make(chan dbcsv.Row, 8)
-		go func(filtered chan<- dbcsv.Row, rows <-chan dbcsv.Row) {
-			defer close(filtered)
-			for row := range rows {
-				row2 := dbcsv.Row{Line: row.Line, Values: make([]string, len(columns))}
-				for i, j := range columns {
-					if j < len(row.Values) {
-						row2.Values[i] = row.Values[j]
-					} else {
-						row2.Values[i] = ""
+
+	ctx, cancel := dbcsv.Wrap(context.Background())
+	defer cancel()
+	rows := make(chan dbcsv.Row, 8)
+	grp, grpCtx := errgroup.WithContext(ctx)
+	grp.Go(func() error {
+		defer close(rows)
+		return cfg.ReadRows(grpCtx,
+			func(ctx context.Context, _ string, row dbcsv.Row) error {
+				logger.Debug("read", "row", row)
+				// filter out empty rows
+				empty := true
+				for _, s := range row.Values {
+					if s != "" {
+						empty = false
+						break
 					}
 				}
-				filtered <- row2
-			}
-		}(filtered, rows)
-		rows = filtered
-	}
+				if empty {
+					return nil
+				}
+				if len(columns) > 0 {
+					row2 := dbcsv.Row{Line: row.Line, Values: make([]string, len(columns))}
+					for i, j := range columns {
+						if j < len(row.Values) {
+							row2.Values[i] = row.Values[j]
+						} else {
+							row2.Values[i] = ""
+						}
+					}
+					row = row2
+				}
+
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case rows <- row:
+					logger.Debug("filtered", "row", row)
+				}
+				return nil
+			},
+		)
+	})
 
 	dsn := os.ExpandEnv(*flagConnect)
 	db, err := sql.Open("godror", dsn)
@@ -197,16 +173,14 @@ Usage:
 	var n int
 	start := time.Now()
 	n, err = dbExec(db, *flagFunc, fixParams, int64(*flagFuncRetOk), rows, *flagOneTx)
-	bw.Flush()
 	if err != nil {
 		return fmt.Errorf("exec %q: %w", *flagFunc, err)
 	}
-	d := time.Since(start)
-	close(errch)
-	if len(errs) > 0 {
-		return fmt.Errorf("ERRORS:\n\t" + strings.Join(errs, "\n\t"))
+	if err = grp.Wait(); err != nil {
+		return err
 	}
-	logger.V(1).Info("processed", "rows", n, "dur", d.String())
+	d := time.Since(start)
+	logger.Debug("processed", "rows", n, "dur", d.String())
 	return nil
 }
 

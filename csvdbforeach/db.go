@@ -9,7 +9,6 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"fmt"
-	"log"
 	"reflect"
 	"strconv"
 	"strings"
@@ -49,12 +48,18 @@ func dbExec(db *sql.DB, fun string, fixParams [][2]string, retOk int64, rows <-c
 		n        int
 		buf      bytes.Buffer
 	)
+	defer func() {
+		if tx != nil {
+			tx.Rollback()
+		}
+	}()
 	if st.Returns {
 		values = append(values, &ret)
 		startIdx = 1
 	}
 
 	for row := range rows {
+		logger.Debug("dbExec", "row", row)
 		if tx == nil {
 			if tx, err = db.Begin(); err != nil {
 				return n, err
@@ -69,7 +74,7 @@ func dbExec(db *sql.DB, fun string, fixParams [][2]string, retOk int64, rows <-c
 		}
 
 		if len(row.Values) > len(st.Converters) {
-			log.Printf("values=%d converters=%d params=%d", len(row.Values), len(st.Converters), st.ParamCount)
+			logger.Warn("converter number mismatch", "values", len(row.Values), "converters", len(st.Converters), "params", st.ParamCount)
 		}
 		values = values[:startIdx]
 		for i, s := range row.Values {
@@ -80,7 +85,7 @@ func dbExec(db *sql.DB, fun string, fixParams [][2]string, retOk int64, rows <-c
 			}
 			v, convErr := safeConvert(conv, s)
 			if convErr != nil {
-				log.Printf("row=%#v error=%v", row, convErr)
+				logger.Error("convert", "row", row, "error", convErr)
 				return n, fmt.Errorf("convert %q (row %d, col %d): %w", s, row.Line, i+1, convErr)
 			}
 			values = append(values, v)
@@ -90,34 +95,35 @@ func dbExec(db *sql.DB, fun string, fixParams [][2]string, retOk int64, rows <-c
 		}
 		values = append(values, st.FixParams...)
 		//log.Printf("%q %#v", st.Qry, values)
+		logger.Info("Exec", "values", values)
 		if _, err = stmt.Exec(values...); err != nil {
-			log.Printf("values=%d ParamCount=%d", len(values), st.ParamCount)
-			log.Printf("execute %q with row %d (%#v): %v", st.Qry, row.Line, values, err)
+			logger.Error("execute", "qry", st.Qry, "line", row.Line, "values", values, "error", err)
 			return n, fmt.Errorf("qry=%q params=%#v: %w", st.Qry, values, err)
 		}
 		n++
 		if st.Returns && values[0] != nil {
 			out := strings.Join(deref(st.FixParams), ", ")
+			logger.Debug("returns", "out", out, "ret", ret, "retOk", retOk, "eq", ret == retOk)
 			if ret == retOk {
 				fmt.Fprintf(stdout, "%d: OK [%s]\t%s\n", ret, out, row.Values)
-			} else {
-				fmt.Fprintf(stderr, "%d: %s\t%s\n", ret, out, row.Values)
-				log.Printf("ROLLBACK (ret=%v)", ret)
-				tx.Rollback()
-				tx = nil
-				buf.Reset()
-				cw := csv.NewWriter(&buf)
-				_ = cw.Write(append([]string{fmt.Sprintf("%d", ret), out}, row.Values...))
-				cw.Flush()
-				stdout.Write(buf.Bytes())
-				if oneTx {
-					return n, fmt.Errorf("returned %v (%s) for line %d (%q)",
-						ret, out, row.Line, row.Values)
-				}
+				continue
+			}
+			fmt.Fprintf(stderr, "%d: %s\t%s\n", ret, out, row.Values)
+			logger.Warn("ROLLBACK", "ret", ret)
+			tx.Rollback()
+			tx = nil
+			buf.Reset()
+			cw := csv.NewWriter(&buf)
+			_ = cw.Write(append([]string{fmt.Sprintf("%d", ret), out}, row.Values...))
+			cw.Flush()
+			stdout.Write(buf.Bytes())
+			if oneTx {
+				return n, fmt.Errorf("returned %v (%s) for line %d (%q)",
+					ret, out, row.Line, row.Values)
 			}
 		}
 		if tx != nil && !oneTx {
-			log.Printf("COMMIT")
+			logger.Info("COMMIT")
 			if err = tx.Commit(); err != nil {
 				return n, err
 			}
@@ -128,6 +134,7 @@ func dbExec(db *sql.DB, fun string, fixParams [][2]string, retOk int64, rows <-c
 		stmt.Close()
 	}
 	if tx != nil {
+		logger.Info("COMMIT")
 		return n, tx.Commit()
 	}
 	return n, nil
