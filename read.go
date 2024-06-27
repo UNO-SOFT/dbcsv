@@ -16,6 +16,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -390,7 +391,21 @@ func ReadXLSXFile(ctx context.Context, fn func(context.Context, string, Row) err
 	sheetName := xlFile.GetSheetName(sheetIndex)
 	if sheetName == "" {
 		m := xlFile.GetSheetMap()
-		if sheetName = m[sheetIndex]; sheetName == "" {
+		if sheetIndex == 0 {
+			if len(m) == 1 {
+				for k := range m {
+					sheetName = m[k]
+					break
+				}
+			} else {
+				keys := make([]int, 0, len(m))
+				for k := range m {
+					keys = append(keys, k)
+				}
+				sort.Ints(keys)
+				sheetName = m[keys[0]]
+			}
+		} else if sheetName = m[sheetIndex]; sheetName == "" {
 			if sheetName = m[sheetIndex-1]; sheetName == "" {
 				if len(m) == 1 {
 					for _, sheetName = range m {

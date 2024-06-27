@@ -102,7 +102,7 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 		return fmt.Errorf("%s: %w", *flagConnect, err)
 	}
 	defer db.Close()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := dbcsv.Wrap(context.Background())
 	defer cancel()
 
 	fh := os.Stdout

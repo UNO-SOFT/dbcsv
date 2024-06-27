@@ -16,7 +16,6 @@ import (
 	"log"
 	"log/slog"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -120,7 +119,7 @@ and dump all the columns of the cursor returned by the function.
 		"05", "59",
 	).Replace(dbcsv.DateFormat) + `"`
 
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, cancel := dbcsv.Wrap(context.Background())
 	defer cancel()
 	if *flagTimeout > 0 {
 		ctx, cancel = context.WithTimeout(ctx, *flagTimeout)

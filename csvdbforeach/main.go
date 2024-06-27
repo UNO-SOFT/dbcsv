@@ -122,6 +122,8 @@ Usage:
 
 	ctx, cancel := dbcsv.Wrap(context.Background())
 	defer cancel()
+	ctx = zlog.NewSContext(ctx, logger)
+
 	rows := make(chan dbcsv.Row, 8)
 	grp, grpCtx := errgroup.WithContext(ctx)
 	grp.Go(func() error {
