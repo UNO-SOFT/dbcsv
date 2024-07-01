@@ -440,7 +440,7 @@ func ReadXLSXFile(ctx context.Context, fn func(context.Context, string, Row) err
 	dateFmts[14], dateFmts[15], dateFmts[16], dateFmts[17], dateFmts[22] = token, token, token, token, token
 	if xlFile.Styles.NumFmts != nil {
 		for _, nf := range xlFile.Styles.NumFmts.NumFmt {
-			//log.Printf("%d. ID=%d code=%q", i, nf.NumFmtID, nf.FormatCode)
+			// fmt.Println("nf=", nf)
 			if strings.Contains(nf.FormatCode, "yy") {
 				dateFmts[nf.NumFmtID] = token
 			}
@@ -492,6 +492,11 @@ func ReadXLSXFile(ctx context.Context, fn func(context.Context, string, Row) err
 				}
 			}
 			if _, ok := dateFmts[numFmtID]; !ok {
+				if numFmtID != 0 && strings.IndexByte(row[j], ',') >= 0 {
+					if raw, _ := xlFile.GetCellValue(sheetName, axis, excelize.Options{RawCellValue: true}); raw != "" && strings.IndexByte(raw, ',') < 0 {
+						row[j] = raw
+					}
+				}
 				continue
 			}
 			v, err := xlFile.GetCellValue(sheetName, axis, excelize.Options{RawCellValue: true})
