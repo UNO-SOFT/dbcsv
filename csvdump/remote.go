@@ -286,8 +286,10 @@ func remoteCSV(ctx context.Context, w io.Writer, sep string, next func() ([]byte
 			}
 			return err
 		}
+		clear(strs)
 		strs = strs[:0]
 		if err := json.Unmarshal(data, &strs); err != nil {
+			clear(arr)
 			arr = arr[:0]
 			if err = json.Unmarshal(data, &arr); err != nil {
 				return fmt.Errorf("decode %q into []any: %w", string(data), err)
