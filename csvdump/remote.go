@@ -57,9 +57,13 @@ func (c *coordinate) String() string {
 func executeCommands(ctx context.Context, w io.Writer, next func() ([]byte, error)) error {
 	f := excelize.NewFile()
 	defer f.Close()
+	var strs []string
+	var arr []any
+	row := 1
 	styles := make(map[string]int)
 	condStyles := make(map[string]int)
 	sheets := make(map[string]int)
+	var sheet string
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -72,8 +76,76 @@ func executeCommands(ctx context.Context, w io.Writer, next func() ([]byte, erro
 			return err
 		}
 
+		data := []byte(s)
+		if len(s) != 0 && s[0] == '[' {
+			if sheet == "" {
+				idx := -1
+				for i, nm := range f.GetSheetMap() {
+					if idx < 0 || i < idx {
+						idx, sheet = i, nm
+					}
+				}
+				if sheet == "" {
+					sheet = "sheet"
+					if _, err = f.NewSheet(sheet); err != nil {
+						return err
+					}
+				}
+			}
+
+			clear(strs)
+			strs = strs[:0]
+			if err := json.Unmarshal(data, &strs); err == nil {
+				for i, s := range strs {
+					var cell string
+					if cell, err = excelize.CoordinatesToCellName(i+1, row); err == nil {
+						err = f.SetCellStr(sheet, cell, s)
+					}
+					if err != nil {
+						return err
+					}
+				}
+			} else {
+				clear(arr)
+				arr = arr[:0]
+				if err = json.Unmarshal(data, &arr); err != nil {
+					return fmt.Errorf("decode %q into []any: %w", string(data), err)
+				}
+				clear(strs)
+				for i, a := range arr {
+					cell, err := excelize.CoordinatesToCellName(i+1, row)
+					if err != nil {
+						return err
+					}
+					switch x := a.(type) {
+					case bool:
+						err = f.SetCellBool(sheet, cell, x)
+					case float32:
+						err = f.SetCellFloat(sheet, cell, float64(x), -1, 32)
+					case float64:
+						err = f.SetCellFloat(sheet, cell, x, -1, 64)
+					case int:
+						err = f.SetCellInt(sheet, cell, x)
+					case int32:
+						err = f.SetCellInt(sheet, cell, int(x))
+					case int64:
+						err = f.SetCellInt(sheet, cell, int(x))
+					case string:
+						err = f.SetCellStr(sheet, cell, x)
+					default:
+						err = f.SetCellStr(sheet, cell, fmt.Sprintf("%v", a))
+					}
+					if err != nil {
+						return err
+					}
+				}
+			}
+			row++
+			continue
+		}
+
 		var c command
-		if err = json.Unmarshal([]byte(s), &c); err != nil {
+		if err = json.Unmarshal(data, &c); err != nil {
 			return fmt.Errorf("unmarshal %q: %w", s, err)
 		}
 		for i, a := range c.Args {
@@ -92,8 +164,9 @@ func executeCommands(ctx context.Context, w io.Writer, next func() ([]byte, erro
 				err = f.MergeCell(c.Args[0].String, c.Args[1].Coord.String(), c.Args[2].Coord.String())
 			}
 		case "newSheet":
+			sheet = c.Args[0].String
 			if err = c.checkArgs("s"); err == nil {
-				sheets[c.Args[0].String], err = f.NewSheet(c.Args[0].String)
+				sheets[sheet], err = f.NewSheet(c.Args[0].String)
 			}
 		case "newStyle":
 			if err = c.checkArgs("sr"); err == nil {
@@ -133,7 +206,8 @@ func executeCommands(ctx context.Context, w io.Writer, next func() ([]byte, erro
 			if len(c.Args) != 3 || c.Args[0].Type != "s" || c.Args[1].Type != "c" {
 				return fmt.Errorf("setCell requires sheet,cell,value, got %v", c.Args)
 			}
-			sheet, cell := c.Args[0].String, c.Args[1].Coord.String()
+			var cell string
+			sheet, cell = c.Args[0].String, c.Args[1].Coord.String()
 			a := c.Args[2]
 			switch a.Type {
 			case "b", "bool":
