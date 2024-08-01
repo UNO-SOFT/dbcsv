@@ -30,12 +30,12 @@ func TestRemote(t *testing.T) {
 		`{"c":"setCell","a":[{"s":"s"},{"s":"A2"},{"t":"f","f":3.14}]}`,
 		`{"c":"newStyle","a":[{"s":"header"},{"t":"r","r":` + "{\"Font\":{\"Bold\":true,\"Size\":16},\"Alignment\":{\"Horizontal\":\"center\",\"WrapText\":true}}" + `}]}`,
 	}
-	if err := executeCommands(ctx, &buf, func() (string, error) {
+	if err := executeCommands(ctx, &buf, func() ([]byte, error) {
 		if pos >= len(commands) {
-			return "", io.EOF
+			return nil, io.EOF
 		}
 		pos++
-		return commands[pos-1], nil
+		return []byte(commands[pos-1]), nil
 	}); err != nil {
 		t.Fatal(err)
 	}

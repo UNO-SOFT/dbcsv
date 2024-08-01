@@ -249,9 +249,9 @@ and dump all the columns of the cursor returned by the function.
 		logger.Debug("encoding", "env", dbcsv.DefaultEncoding.Name)
 
 		if queries[0].QueueName != "" {
-			Q, err := queries[0].OpenQueue(ctx, tx)
-			if err != nil {
-				return err
+			Q, openErr := queries[0].OpenQueue(ctx, tx)
+			if openErr != nil {
+				return openErr
 			}
 			defer Q.Close()
 			err = dumpRemoteCSVQueue(ctx, w, Q, *flagSep)
