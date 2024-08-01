@@ -201,10 +201,10 @@ func getQuery(db querier, fun string, fixParams [][2]string) (Statement, error) 
 	params := make([]interface{}, 0, 3)
 	switch len(parts) {
 	case 1:
-		qry += "user_arguments WHERE object_name = UPPER(:1)"
+		qry += "all_arguments WHERE owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') AND object_name = UPPER(:1)"
 		params = append(params, fun)
 	case 2:
-		qry += "user_arguments WHERE package_name = UPPER(:1) AND object_name = UPPER(:2)"
+		qry += "all_arguments WHERE owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') AND package_name = UPPER(:1) AND object_name = UPPER(:2)"
 		params = append(params, parts[0], parts[1])
 	case 3:
 		qry += "all_arguments WHERE owner = UPPER(:1) AND package_name = UPPER(:2) AND object_name = UPPER(:3)"
