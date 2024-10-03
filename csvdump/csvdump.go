@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/text/encoding"
@@ -299,7 +300,9 @@ and dump all the columns of the cursor returned by the function.
 				}
 				defer Q.Close()
 
-				err = executeCommands(ctx, wfh, queueNext(grpCtx, Q))
+				shortCtx, shortCancel := context.WithTimeout(grpCtx, time.Hour)
+				err = executeCommands(shortCtx, wfh, queueNext(grpCtx, Q))
+				shortCancel()
 				Q.Close()
 				if err != nil {
 					break
