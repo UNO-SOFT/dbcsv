@@ -668,6 +668,58 @@ func ReadCSV(ctx context.Context, fn func(context.Context, Row) error, r io.Read
 	return nil
 }
 
+func ReadFile(ctx context.Context, fileName string, f func(context.Context, string, Row) error) error {
+	fh, err := os.Open(fileName)
+	if err != nil {
+		return fmt.Errorf("open %q: %w", fileName, err)
+	}
+	defer fh.Close()
+	typ, err := DetectReaderType(fh, fh.Name())
+	if err != nil {
+		return fmt.Errorf("DetectReaderType: %w", err)
+	}
+
+	var errs []error
+	switch typ.Type {
+	case Xls:
+		wb, err := xls.Open(fileName, "")
+		if err != nil {
+			return fmt.Errorf("open %q: %w", fileName, err)
+		}
+		for i := range wb.NumSheets() {
+			if err := ReadXLSFile(ctx, f, fh.Name(), "", i, nil, 0); err != nil {
+				errs = append(errs, fmt.Errorf("sheet %d: %w", i, err))
+			}
+		}
+
+	case XlsX:
+		xlFile, err := excelize.OpenFile(fileName)
+		if err != nil {
+			return fmt.Errorf("open %q: %w", fileName, err)
+		}
+		defer xlFile.Close()
+		for i := range xlFile.GetSheetMap() {
+			if err := ReadXLSXFile(ctx, f, fh.Name(), i, nil, 0); err != nil {
+				errs = append(errs, fmt.Errorf("sheet %v: %w", i, err))
+			}
+		}
+
+	case Csv:
+		if _, err = fh.Seek(0, 0); err != nil {
+			return err
+		}
+		if err := ReadCSV(ctx,
+			func(ctx context.Context, row Row) error { return f(ctx, "", row) },
+			fh, "", nil, 0,
+		); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return errors.Join(errs...)
+
+}
+
 type Row struct {
 	Values  []string
 	Columns []string
