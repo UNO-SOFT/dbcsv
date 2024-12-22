@@ -1,4 +1,4 @@
-// Copyright 2021, 2023 Tamás Gulácsi.
+// Copyright 2021, 2024 Tamás Gulácsi.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -27,7 +27,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/peterbourgon/ff/v3/ffcli"
+	"github.com/peterbourgon/ff/v4"
+	"github.com/peterbourgon/ff/v4/ffhelp"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/godror/godror"
@@ -76,23 +77,24 @@ func Main() error {
 	}
 
 	cfg := config{Config: new(dbcsv.Config)}
-	fs := flag.NewFlagSet("load", flag.ContinueOnError)
-	flagConnect := fs.String("connect", os.Getenv("DB_ID"), "database to connect to")
-	fs.BoolVar(&cfg.Truncate, "truncate", false, "truncate table")
-	fs.StringVar(&cfg.Tablespace, "tablespace", "DATA", "tablespace to create table in")
-	flagFields := fs.String("fields", "", "target fields, comma separated names")
-	fs.BoolVar(&cfg.ForceString, "force-string", false, "force all columns to be VARCHAR2")
-	fs.BoolVar(&cfg.JustPrint, "just-print", false, "just print the INSERTs")
-	fs.StringVar(&cfg.Copy, "copy", "", "copy this table's structure")
-	fs.IntVar(&cfg.ChunkSize, "chunk-size", defaultChunkSize, "chunk size - number of rows inserted at once")
-	fs.Var(&verbose, "v", "verbose logging")
-	fs.BoolVar(&cfg.LobSource, "lob", false, "source is not a filename but a query that returns a LOB")
+	FS := flag.NewFlagSet("load", flag.ContinueOnError)
+	flagConnect := FS.String("connect", os.Getenv("DB_ID"), "database to connect to")
+	FS.BoolVar(&cfg.Truncate, "truncate", false, "truncate table")
+	FS.StringVar(&cfg.Tablespace, "tablespace", "DATA", "tablespace to create table in")
+	flagFields := FS.String("fields", "", "target fields, comma separated names")
+	FS.BoolVar(&cfg.ForceString, "force-string", false, "force all columns to be VARCHAR2")
+	FS.BoolVar(&cfg.JustPrint, "just-print", false, "just print the INSERTs")
+	FS.StringVar(&cfg.Copy, "copy", "", "copy this table's structure")
+	FS.IntVar(&cfg.ChunkSize, "chunk-size", defaultChunkSize, "chunk size - number of rows inserted at once")
+	FS.Var(&verbose, "v", "verbose logging")
+	FS.BoolVar(&cfg.LobSource, "lob", false, "source is not a filename but a query that returns a LOB")
 	if *flagConnect == "" {
 		if *flagConnect = os.Getenv("BRUNO_OWNER_ID"); *flagConnect == "" {
 			*flagConnect = os.Getenv("BRUNO_ID")
 		}
 	}
-	loadCmd := ffcli.Command{Name: "load", FlagSet: fs,
+	loadCmd := ff.Command{Name: "load",
+		Flags: ff.NewFlagSetFrom(FS.Name(), FS),
 		Exec: func(ctx context.Context, args []string) error {
 			if len(args) != 2 {
 				return errors.New("need two args: the table and the source")
@@ -114,7 +116,7 @@ func Main() error {
 		},
 	}
 
-	sheetCmd := ffcli.Command{Name: "sheet",
+	sheetCmd := ff.Command{Name: "sheet",
 		Exec: func(ctx context.Context, args []string) error {
 			if err := cfg.Config.Open(args[0]); err != nil {
 				return err
@@ -136,27 +138,34 @@ func Main() error {
 		},
 	}
 
-	fs = flag.NewFlagSet("csvload", flag.ContinueOnError)
-	fs.StringVar(&cfg.Charset, "charset", encName, "input charset")
-	fs.StringVar(&cfg.Delim, "delim", "", "CSV separator")
-	fs.IntVar(&cfg.Concurrency, "concurrency", 4, "concurrency")
-	fs.StringVar(&dateFormat, "date", dateFormat, "date format, in Go notation")
-	fs.IntVar(&cfg.Skip, "skip", 0, "skip rows")
-	fs.IntVar(&cfg.Sheet, "sheet", 0, "sheet of spreadsheet")
-	fs.StringVar(&cfg.ColumnsString, "columns", "", "columns, comma separated indexes")
-	flagMemProf := fs.String("memprofile", "", "file to output memory profile to")
-	flagCPUProf := fs.String("cpuprofile", "", "file to output CPU profile to")
-	app := ffcli.Command{Name: "csvload", FlagSet: fs, ShortUsage: "load from csv/xls/ods into database table",
+	FS = flag.NewFlagSet("csvload", flag.ContinueOnError)
+	FS.StringVar(&cfg.Charset, "charset", encName, "input charset")
+	FS.StringVar(&cfg.Delim, "delim", "", "CSV separator")
+	FS.IntVar(&cfg.Concurrency, "concurrency", 4, "concurrency")
+	FS.StringVar(&dateFormat, "date", dateFormat, "date format, in Go notation")
+	FS.IntVar(&cfg.Skip, "skip", 0, "skip rows")
+	FS.IntVar(&cfg.Sheet, "sheet", 0, "sheet of spreadsheet")
+	FS.StringVar(&cfg.ColumnsString, "columns", "", "columns, comma separated indexes")
+	flagMemProf := FS.String("memprofile", "", "file to output memory profile to")
+	flagCPUProf := FS.String("cpuprofile", "", "file to output CPU profile to")
+	app := ff.Command{Name: "csvload",
+		Usage:       "load from csv/xls/ods into database table",
+		Flags:       ff.NewFlagSetFrom(FS.Name(), FS),
 		Exec:        func(ctx context.Context, args []string) error { return loadCmd.Exec(ctx, args) },
-		Subcommands: []*ffcli.Command{&loadCmd, &sheetCmd},
+		Subcommands: []*ff.Command{&loadCmd, &sheetCmd},
 	}
 
 	args := os.Args[1:]
 	if err := app.Parse(args); err != nil {
+		if errors.Is(err, ff.ErrHelp) {
+			ffhelp.Command(&app).WriteTo(os.Stderr)
+			return nil
+		}
 		if len(args) == 0 {
 			return err
 		}
 		if err = app.Parse(append(append(make([]string, 0, 1+len(args)), "load"), args...)); err != nil {
+			ffhelp.Command(&app).WriteTo(os.Stderr)
 			return err
 		}
 	}
