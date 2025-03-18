@@ -198,6 +198,7 @@ and dump all the columns of the cursor returned by the function.
 		qry = getQuery(qry, where, columns, dbcsv.DefaultEncoding)
 		queries = append(queries, Query{Query: qry})
 	}
+	// logger.Info("x", "queries", queries, "params", params)
 
 	fh := interface {
 		io.WriteCloser

@@ -103,7 +103,7 @@ func Main() error {
 			if err != nil {
 				return fmt.Errorf("%q: %w", *flagConnect, err)
 			}
-			P.StandaloneConnection = false
+			// P.StandaloneConnection = godror.Bool(false)
 			P.SetSessionParamOnInit("NLS_NUMERIC_CHARACTERS", ". ")
 			connector := godror.NewConnector(P)
 			db := sql.OpenDB(connector)
