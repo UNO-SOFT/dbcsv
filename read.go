@@ -373,6 +373,7 @@ func (cfg *Config) ReadSheets(ctx context.Context) (map[int]string, error) {
 		if err != nil {
 			return nil, err
 		}
+		defer xlFile.Close()
 		return xlFile.GetSheetMap(), nil
 	}
 	// CSV
@@ -388,6 +389,7 @@ func ReadXLSXFile(ctx context.Context, fn func(context.Context, string, Row) err
 	if err != nil {
 		return fmt.Errorf("open %q: %w", filename, err)
 	}
+	defer xlFile.Close()
 	sheetName := xlFile.GetSheetName(sheetIndex)
 	if sheetName == "" {
 		m := xlFile.GetSheetMap()

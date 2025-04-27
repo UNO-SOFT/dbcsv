@@ -949,6 +949,7 @@ func filterCols(cols []Column, fields []string) []Column {
 	if len(fields) == 0 || len(cols) == 0 {
 		return cols
 	}
+	logger.Info("filterCols", "fields", fields)
 	m := make(map[string]int, len(cols))
 	for i, c := range cols {
 		m[c.Name] = i
