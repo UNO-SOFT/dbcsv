@@ -100,7 +100,7 @@ Usage:
 	var fixParams [][2]string
 	var buf bytes.Buffer
 	if strings.TrimSpace(*flagFixParams) != "" {
-		for _, tup := range strings.Split(*flagFixParams, ",") {
+		for tup := range strings.SplitSeq(*flagFixParams, ",") {
 			parts := strings.SplitN(tup, "=>", 2)
 			tpl := template.Must(template.New(parts[0]).Parse(parts[1]))
 			buf.Reset()

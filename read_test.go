@@ -68,7 +68,7 @@ func TestCompressedTempCSV(t *testing.T) {
 		defer stdw.Close()
 		defer close(errCh)
 		_, _ = stdw.Write([]byte("id;str\n"))
-		for i := 0; i < 1000; i++ {
+		for i := range 1000 {
 			if _, err := fmt.Fprintf(stdw, "%d;árvíztűrő tükörfúrógép\n", i); err != nil {
 				errCh <- err
 				return
@@ -88,7 +88,7 @@ func TestCompressedTempCSV(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		if err := cfg.ReadRows(ctx, func(ctx context.Context, s string, r dbcsv.Row) error { t.Log(s, r); return nil }); err != nil {
 			t.Error(err)
 		}

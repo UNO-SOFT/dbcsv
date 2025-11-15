@@ -339,7 +339,7 @@ func (cfg *Config) parseColumnsString() error {
 	}
 
 	cfg.columns = make([]int, 0, strings.Count(cfg.ColumnsString, ",")+1)
-	for _, x := range strings.Split(cfg.ColumnsString, ",") {
+	for x := range strings.SplitSeq(cfg.ColumnsString, ",") {
 		i, err := strconv.Atoi(x)
 		if err != nil {
 			return fmt.Errorf("%s: %w", x, err)
@@ -364,7 +364,7 @@ func (cfg *Config) ReadSheets(ctx context.Context) (map[int]string, error) {
 		}
 		n := wb.NumSheets()
 		m := make(map[int]string, n)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			m[i] = wb.GetSheet(i).Name
 		}
 		return m, nil

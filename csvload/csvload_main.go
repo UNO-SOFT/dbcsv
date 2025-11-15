@@ -315,7 +315,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 				continue
 			}
 
-			vals := make([]interface{}, len(cols))
+			vals := make([]any, len(cols))
 			for j, s := range row.Values {
 				buf.Reset()
 				col := cols[j]
@@ -413,7 +413,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 		Start int64
 	}
 	rowsCh := make(chan rowsType, cfg.Concurrency)
-	chunkPool := sync.Pool{New: func() interface{} { z := make([][]string, 0, chunkSize); return &z }}
+	chunkPool := sync.Pool{New: func() any { z := make([][]string, 0, chunkSize); return &z }}
 
 	grp, grpCtx = errgroup.WithContext(ctx)
 
@@ -431,7 +431,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 			}
 			nCols := len(columns)
 			cols := make([][]string, nCols)
-			rowsI := make([]interface{}, nCols)
+			rowsI := make([]any, nCols)
 
 			for rs := range rowsCh {
 				chunk := rs.Rows
@@ -500,7 +500,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 				err = fmt.Errorf("%s: %w", qry, err)
 
 				rowsR := make([]reflect.Value, len(rowsI))
-				rowsI2 := make([]interface{}, len(rowsI))
+				rowsI2 := make([]any, len(rowsI))
 				for j, I := range rowsI {
 					rowsR[j] = reflect.ValueOf(I)
 					rowsI2[j] = ""
@@ -803,7 +803,7 @@ func (t Type) String() string {
 	}
 }
 
-func (c Column) FromString(ss []string) (interface{}, error) {
+func (c Column) FromString(ss []string) (any, error) {
 	if c.DataType == "DATE" || strings.HasPrefix(c.DataType, "TIMESTAMP") || c.Type == Date {
 		res := make([]sql.NullTime, len(ss))
 		for i, s := range ss {
@@ -1032,7 +1032,7 @@ func (cfg config) Open(ctx context.Context, db *sql.DB, fn string) (err error) {
 			if !rows.Next() {
 				return io.EOF
 			}
-			var lobI interface{}
+			var lobI any
 			if err = rows.Scan(&lobI); err != nil {
 				return fmt.Errorf("scan %s: %w", qry, err)
 			}

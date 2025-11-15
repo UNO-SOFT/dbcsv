@@ -129,7 +129,7 @@ and dump all the columns of the cursor returned by the function.
 	ctx = zlog.NewSContext(ctx, logger)
 
 	var queries []Query
-	var params []interface{}
+	var params []any
 	db, err := sql.Open("godror", *flagConnect)
 	if err != nil {
 		return fmt.Errorf("%s: %w", *flagConnect, err)
@@ -178,7 +178,7 @@ and dump all the columns of the cursor returned by the function.
 		Q.ParseQueue()
 		queries = append(queries, Q)
 	} else {
-		params = make([]interface{}, len(flagParams.Strings))
+		params = make([]any, len(flagParams.Strings))
 		for i, p := range flagParams.Strings {
 			params[i] = p
 		}
@@ -405,25 +405,25 @@ func getQuery(table, where string, columns []string, enc encoding.Encoding) stri
 }
 
 type queryer interface {
-	QueryContext(context.Context, string, ...interface{}) (*sql.Rows, error)
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }
 
 type execer interface {
-	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }
 type queryExecer interface {
 	queryer
 	execer
 }
 
-func doQuery(ctx context.Context, db queryExecer, qry string, params []interface{}, isCall, doSort bool) (*sql.Rows, []dbcsv.Column, error) {
+func doQuery(ctx context.Context, db queryExecer, qry string, params []any, isCall, doSort bool) (*sql.Rows, []dbcsv.Column, error) {
 	var rows *sql.Rows
 	var err error
 	const defaultBatchSize = 1024
 	batchSize := defaultBatchSize
 	if isCall {
 		var dRows driver.Rows
-		params = append(append(make([]interface{}, 0, 2+len(params)),
+		params = append(append(make([]any, 0, 2+len(params)),
 			sql.Out{Dest: &dRows}, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize+1)),
 			params...)
 		if _, err = db.ExecContext(ctx, qry, params...); err == nil {
@@ -513,9 +513,9 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []interface
 	return rows, columns, nil
 }
 
-func splitParamArgs(fun string, args []string) (plsql string, params []interface{}) {
+func splitParamArgs(fun string, args []string) (plsql string, params []any) {
 	haveParens := strings.Contains(fun, "(") && strings.Contains(fun, ")")
-	params = make([]interface{}, len(args))
+	params = make([]any, len(args))
 	var buf strings.Builder
 	buf.WriteString("BEGIN :1 := ")
 	buf.WriteString(fun)

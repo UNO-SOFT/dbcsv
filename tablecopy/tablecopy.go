@@ -86,7 +86,7 @@ will execute a "SELECT * FROM Source_table@source_db WHERE F_ield=1" and an "INS
 		*flagTableTimeout = *flagTimeout
 	}
 
-	var Log func(...interface{}) error
+	var Log func(...any) error
 	if verbose.Level() < slog.LevelInfo {
 		Log = logger.Log
 	}
@@ -256,7 +256,7 @@ type copyTask struct {
 	Truncate        bool
 }
 
-func One(ctx context.Context, dstTx, srcTx *sql.Tx, task copyTask, batchSize int, Log func(...interface{}) error) (int64, error) {
+func One(ctx context.Context, dstTx, srcTx *sql.Tx, task copyTask, batchSize int, Log func(...any) error) (int64, error) {
 	logger.Info("One", "task", task)
 	if task.Dst == "" {
 		task.Dst = task.Src
@@ -334,9 +334,9 @@ func One(ctx context.Context, dstTx, srcTx *sql.Tx, task copyTask, batchSize int
 		return n, fmt.Errorf("%s: %w", srcQry, err)
 	}
 
-	values := make([]interface{}, len(types))
+	values := make([]any, len(types))
 	rBatch := make([]reflect.Value, len(values))
-	batchValues := make([]interface{}, 0, len(rBatch))
+	batchValues := make([]any, 0, len(rBatch))
 	for i, t := range types {
 		et := t.ScanType()
 		values[i] = reflect.New(et).Interface()

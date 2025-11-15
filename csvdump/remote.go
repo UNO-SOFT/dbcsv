@@ -125,11 +125,11 @@ func executeCommands(ctx context.Context, w io.Writer, next func() ([]byte, erro
 					case float64:
 						err = f.SetCellFloat(sheet, cell, x, -1, 64)
 					case int:
-						err = f.SetCellInt(sheet, cell, x)
+						err = f.SetCellInt(sheet, cell, int64(x))
 					case int32:
-						err = f.SetCellInt(sheet, cell, int(x))
+						err = f.SetCellInt(sheet, cell, int64(x))
 					case int64:
-						err = f.SetCellInt(sheet, cell, int(x))
+						err = f.SetCellInt(sheet, cell, int64(x))
 					case string:
 						err = f.SetCellStr(sheet, cell, x)
 					default:
@@ -217,7 +217,7 @@ func executeCommands(ctx context.Context, w io.Writer, next func() ([]byte, erro
 			case "F", "formula":
 				err = f.SetCellFormula(sheet, cell, a.String)
 			case "i", "int":
-				err = f.SetCellInt(sheet, cell, a.Int)
+				err = f.SetCellInt(sheet, cell, int64(a.Int))
 			case "R", "richtext":
 				err = f.SetCellRichText(sheet, cell, a.RichText)
 			case "s", "string":

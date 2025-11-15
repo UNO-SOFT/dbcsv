@@ -22,7 +22,7 @@ const (
 	DateTimeFormat = "20060102150405"
 )
 
-func safeConvert(conv func(string) (interface{}, error), s string) (v interface{}, err error) {
+func safeConvert(conv func(string) (any, error), s string) (v any, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			var ok bool
@@ -42,7 +42,7 @@ func dbExec(db *sql.DB, fun string, fixParams [][2]string, retOk int64, rows <-c
 	var (
 		stmt     *sql.Stmt
 		tx       *sql.Tx
-		values   = make([]interface{}, 0, st.ParamCount)
+		values   = make([]any, 0, st.ParamCount)
 		startIdx int
 		ret      int64
 		n        int
@@ -140,18 +140,18 @@ func dbExec(db *sql.DB, fun string, fixParams [][2]string, retOk int64, rows <-c
 	return n, nil
 }
 
-type ConvFunc func(string) (interface{}, error)
+type ConvFunc func(string) (any, error)
 
 type Statement struct {
 	Qry        string
 	Converters []ConvFunc
-	FixParams  []interface{}
+	FixParams  []any
 	ParamCount int
 	Returns    bool
 }
 
 type querier interface {
-	Query(string, ...interface{}) (*sql.Rows, error)
+	Query(string, ...any) (*sql.Rows, error)
 }
 
 func getQuery(db querier, fun string, fixParams [][2]string) (Statement, error) {
@@ -198,7 +198,7 @@ func getQuery(db querier, fun string, fixParams [][2]string) (Statement, error) 
 
 	parts := strings.Split(fun, ".")
 	qry := "SELECT argument_name, data_type, in_out, data_length, data_precision, data_scale FROM "
-	params := make([]interface{}, 0, 3)
+	params := make([]any, 0, 3)
 	switch len(parts) {
 	case 1:
 		qry += "all_arguments WHERE owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') AND object_name = UPPER(:1)"
@@ -297,7 +297,7 @@ type Arg struct {
 	Length, Precision, Scale int
 }
 
-func strToDate(s string) (interface{}, error) {
+func strToDate(s string) (any, error) {
 	if justNums(s, 14) == "" {
 		return nil, nil
 	}
@@ -354,7 +354,7 @@ func justNums(s string, maxLen int) string {
 		s)
 }
 
-func deref(in []interface{}) []string {
+func deref(in []any) []string {
 	out := make([]string, 0, len(in))
 	for _, v := range in {
 		if v == nil {

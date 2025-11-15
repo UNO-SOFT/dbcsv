@@ -89,7 +89,7 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 		}
 	}
 
-	params := make([]interface{}, 0, len(flagValues.Strings))
+	params := make([]any, 0, len(flagValues.Strings))
 	for _, s := range flagValues.Strings {
 		if i := strings.IndexAny(s, "-:= \t"); i < 0 {
 			return fmt.Errorf("%q does not contain a separator", s)
@@ -128,7 +128,6 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 	var bwMu sync.Mutex
 	grp, grpCtx := errgroup.WithContext(ctx)
 	for _, qry := range queries {
-		qry := qry
 		grp.Go(func() error {
 			concLimit <- struct{}{}
 			defer func() { <-concLimit }()
@@ -178,24 +177,24 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 }
 
 type Table struct {
-	Name  string                   `json:"name"`
-	Error string                   `json:"error,omitempty"`
-	Rows  []map[string]interface{} `json:"rows"`
+	Name  string           `json:"name"`
+	Error string           `json:"error,omitempty"`
+	Rows  []map[string]any `json:"rows"`
 }
 
 type queryer interface {
-	QueryContext(context.Context, string, ...interface{}) (*sql.Rows, error)
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }
 
 type execer interface {
-	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }
 type queryExecer interface {
 	queryer
 	execer
 }
 
-func doQuery(ctx context.Context, db queryExecer, qry string, fetchRowCount int, params []interface{}) ([]map[string]interface{}, error) {
+func doQuery(ctx context.Context, db queryExecer, qry string, fetchRowCount int, params []any) ([]map[string]any, error) {
 	if fetchRowCount <= 0 {
 		fetchRowCount = DefaultFetchRowCount
 	}
@@ -209,17 +208,17 @@ func doQuery(ctx context.Context, db queryExecer, qry string, fetchRowCount int,
 	if err != nil {
 		return nil, err
 	}
-	vals := make([]interface{}, len(columns))
-	dest := make([]interface{}, len(columns))
+	vals := make([]any, len(columns))
+	dest := make([]any, len(columns))
 	for i := range vals {
 		dest[i] = &vals[i]
 	}
-	values := make([]map[string]interface{}, 0, fetchRowCount)
+	values := make([]map[string]any, 0, fetchRowCount)
 	for rows.Next() {
 		if err := rows.Scan(dest...); err != nil {
 			return values, fmt.Errorf("scan into %#v: %w", dest, err)
 		}
-		m := make(map[string]interface{}, len(vals))
+		m := make(map[string]any, len(vals))
 		for i := range vals {
 			if vals[i] == nil || reflect.ValueOf(vals[i]).IsZero() {
 				continue

@@ -28,7 +28,7 @@ import (
 func DumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column, header bool, sep string, raw bool) error {
 	logger := zlog.SFromContext(ctx)
 	sepB := []byte(sep)
-	dest := make([]interface{}, len(columns))
+	dest := make([]any, len(columns))
 	bw := bufio.NewWriterSize(w, 65536)
 	defer bw.Flush()
 	values := make([]Stringer, len(columns))
@@ -95,8 +95,8 @@ func DumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column,
 
 func DumpSheet(ctx context.Context, sheet spreadsheet.Sheet, rows *sql.Rows, columns []Column) error {
 	logger := zlog.SFromContext(ctx)
-	dest := make([]interface{}, len(columns))
-	vals := make([]interface{}, len(columns))
+	dest := make([]any, len(columns))
+	vals := make([]any, len(columns))
 	values := make([]Stringer, len(columns))
 	for i, col := range columns {
 		c := col.Converter("")
@@ -160,7 +160,7 @@ func (col Column) Converter(sep string) Stringer {
 
 type Stringer interface {
 	String() string
-	Pointer() interface{}
+	Pointer() any
 	sql.Scanner
 	driver.Valuer
 }
@@ -172,8 +172,8 @@ type ValNumber struct {
 func (v ValNumber) Value() (driver.Value, error) { return spreadsheet.Number(v.value), nil }
 func (v ValNumber) String() string               { return csvQuoteString(v.Sep, string(v.value)) }
 func (v ValNumber) StringRaw() string            { return string(v.value) }
-func (v *ValNumber) Pointer() interface{}        { return &v.value }
-func (v *ValNumber) Scan(x interface{}) error    { return v.value.Scan(x) }
+func (v *ValNumber) Pointer() any                { return &v.value }
+func (v *ValNumber) Scan(x any) error            { return v.value.Scan(x) }
 
 type ValString struct {
 	Sep   string
@@ -183,8 +183,8 @@ type ValString struct {
 func (v ValString) Value() (driver.Value, error) { return v.value, nil }
 func (v ValString) String() string               { return csvQuoteString(v.Sep, v.value.String) }
 func (v ValString) StringRaw() string            { return v.value.String }
-func (v *ValString) Pointer() interface{}        { return &v.value }
-func (v *ValString) Scan(x interface{}) error    { return v.value.Scan(x) }
+func (v *ValString) Pointer() any                { return &v.value }
+func (v *ValString) Scan(x any) error            { return v.value.Scan(x) }
 
 type ValBytes struct {
 	Sep   string
@@ -194,8 +194,8 @@ type ValBytes struct {
 func (v ValBytes) Value() (driver.Value, error) { return v.value, nil }
 func (v ValBytes) String() string               { return csvQuoteString(v.Sep, fmt.Sprintf("%x", v.value)) }
 func (v ValBytes) StringRaw() string            { return fmt.Sprintf("%x", v.value) }
-func (v *ValBytes) Pointer() interface{}        { return &v.value }
-func (v *ValBytes) Scan(x interface{}) error {
+func (v *ValBytes) Pointer() any                { return &v.value }
+func (v *ValBytes) Scan(x any) error {
 	if x == nil {
 		v.value = nil
 		return nil
@@ -222,8 +222,8 @@ func (v ValInt) String() string {
 	}
 	return ""
 }
-func (v *ValInt) Pointer() interface{}     { return &v.value }
-func (v *ValInt) Scan(x interface{}) error { return v.value.Scan(x) }
+func (v *ValInt) Pointer() any     { return &v.value }
+func (v *ValInt) Scan(x any) error { return v.value.Scan(x) }
 
 type ValFloat struct {
 	value sql.NullFloat64
@@ -236,8 +236,8 @@ func (v ValFloat) String() string {
 	}
 	return ""
 }
-func (v *ValFloat) Pointer() interface{}     { return &v.value }
-func (v *ValFloat) Scan(x interface{}) error { return v.value.Scan(x) }
+func (v *ValFloat) Pointer() any     { return &v.value }
+func (v *ValFloat) Scan(x any) error { return v.value.Scan(x) }
 
 type ValTime struct {
 	value sql.NullTime
@@ -272,7 +272,7 @@ func (v ValTime) StringRaw() string {
 	return v.value.Time.Format(DateFormat)
 }
 
-func (vt *ValTime) Scan(v interface{}) error {
+func (vt *ValTime) Scan(v any) error {
 	if v == nil {
 		vt.value = sql.NullTime{}
 		return nil
@@ -287,11 +287,11 @@ func (vt *ValTime) Scan(v interface{}) error {
 	}
 	return nil
 }
-func (v *ValTime) Pointer() interface{} { return v }
+func (v *ValTime) Pointer() any { return v }
 
 var typeOfTime, typeOfNullTime, typeOfByteSlice = reflect.TypeOf(time.Time{}), reflect.TypeOf(sql.NullTime{}), reflect.TypeOf(([]byte)(nil))
 
-var bufPool = sync.Pool{New: func() interface{} { return bytes.NewBuffer(make([]byte, 0, 1024)) }}
+var bufPool = sync.Pool{New: func() any { return bytes.NewBuffer(make([]byte, 0, 1024)) }}
 
 func csvQuoteString(sep, s string) string {
 	if sep == "" {
@@ -324,7 +324,7 @@ func csvQuote(w io.Writer, sep, s string) (int, error) {
 	return n + m, err
 }
 
-func GetColumns(ctx context.Context, rows interface{}) ([]Column, error) {
+func GetColumns(ctx context.Context, rows any) ([]Column, error) {
 	logger := zlog.SFromContext(ctx)
 	if r, ok := rows.(*sql.Rows); ok {
 		types, err := r.ColumnTypes()
