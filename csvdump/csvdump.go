@@ -514,6 +514,9 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []any, isCa
 }
 
 func splitParamArgs(fun string, args []string) (plsql string, params []any) {
+	if strings.HasPrefix(fun, "DECLARE") {
+		return fun, nil
+	}
 	haveParens := strings.Contains(fun, "(") && strings.Contains(fun, ")")
 	params = make([]any, len(args))
 	var buf strings.Builder
