@@ -24,6 +24,7 @@ import (
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/encoding/htmlindex"
+	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/transform"
 
 	"github.com/extrame/xls"
@@ -51,7 +52,7 @@ func init() {
 func EncFromName(e string) (NamedEncoding, error) {
 	switch strings.NewReplacer("-", "", "_", "").Replace(strings.ToLower(e)) {
 	case "", "utf8":
-		return NamedEncoding{Encoding: encoding.Nop, Name: "utf-8"}, nil
+		return NamedEncoding{Encoding: unicode.UTF8BOM, Name: "utf-8"}, nil
 	case "iso88591":
 		return NamedEncoding{Encoding: charmap.ISO8859_1, Name: "iso-8859-1"}, nil
 	case "iso88592":
@@ -211,11 +212,12 @@ func (cfg *Config) Open(fileName string) error {
 	r = io.MultiReader(bytes.NewReader(buf.Bytes()), r)
 
 	if cfg.typ.Compression != "" {
-		if cfg.typ.Compression == Gzip {
+		switch cfg.typ.Compression {
+		case Gzip:
 			if r, err = gzip.NewReader(r); err != nil {
 				return err
 			}
-		} else if cfg.typ.Compression == Zstd {
+		case Zstd:
 			if r, err = zstd.NewReader(r); err != nil {
 				return err
 			}
@@ -607,6 +609,10 @@ func ReadCSV(ctx context.Context, fn func(context.Context, Row) error, r io.Read
 		return err
 	}
 	br := bufio.NewReader(r)
+	if b, _ := br.Peek(3); len(b) >= 3 &&
+		b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF { // UTF8-BOM
+		br.Discard(3)
+	}
 	if delim == "" {
 		b, err := br.Peek(1024)
 		if err != nil && len(b) == 0 {

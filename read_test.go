@@ -101,29 +101,34 @@ func TestCompressedTempCSV(t *testing.T) {
 func TestReadDetectDelim(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	for _, tC := range []struct {
+	for nm, tC := range map[string]struct {
 		Text string
 		Want []dbcsv.Row
 	}{
-		{"HEADER_NO_DELIM\n123\n", []dbcsv.Row{
+		"no-delim": {"HEADER_NO_DELIM\n123\n", []dbcsv.Row{
 			{Columns: []string{"HEADER_NO_DELIM"}, Values: []string{"HEADER_NO_DELIM"}, Line: 0},
 			{Columns: []string{"HEADER_NO_DELIM"}, Values: []string{"123"}, Line: 1},
 		}},
-		{`"COL1,";COL2` + "\na;b\n", []dbcsv.Row{
+		";": {`"COL1,";COL2` + "\na;b\n", []dbcsv.Row{
 			{Columns: []string{"COL1,", "COL2"}, Values: []string{"COL1,", "COL2"}, Line: 0},
 			{Columns: []string{"COL1,", "COL2"}, Values: []string{"a", "b"}, Line: 1},
 		}},
 	} {
-		var i int
-		if err := dbcsv.ReadCSV(ctx, func(ctx context.Context, r dbcsv.Row) error {
-			if d := cmp.Diff(tC.Want[i], r); d != "" {
-				t.Errorf("%d: %s", i, d)
-			}
-			i++
-			return nil
-		},
-			strings.NewReader(tC.Text), "", nil, 0); err != nil {
-			t.Fatal(err)
+		const utf8BOM = "\ufeff"
+		for _, prefix := range []string{"", utf8BOM} {
+			t.Run(nm+fmt.Sprintf("-bom=%t", prefix != ""), func(t *testing.T) {
+				var i int
+				if err := dbcsv.ReadCSV(ctx, func(ctx context.Context, r dbcsv.Row) error {
+					if d := cmp.Diff(tC.Want[i], r); d != "" {
+						t.Errorf("%d: %s", i, d)
+					}
+					i++
+					return nil
+				},
+					strings.NewReader(prefix+tC.Text), "", nil, 0); err != nil {
+					t.Fatal(err)
+				}
+			})
 		}
 	}
 }
