@@ -961,13 +961,16 @@ func filterCols(cols []Column, fields []string) []Column {
 		}
 	}
 	columns := make([]Column, 0, len(fields))
-	for _, f := range fields {
+	for j, f := range fields {
 		if i, ok := m[strings.ToUpper(f)]; ok {
 			columns = append(columns, cols[i])
 		} else if i, ok = m[mkColName(f)]; ok {
 			columns = append(columns, cols[i])
+		} else if len(cols) == len(fields) {
+			logger.Warn("unknown", "field", f)
+			columns = append(columns, cols[j])
 		} else {
-			logger.Info("filter out", "field", f, "col", mkColName(f))
+			logger.Error("filter out", "field", f, "have", m)
 		}
 	}
 	return columns
