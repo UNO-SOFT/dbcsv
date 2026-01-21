@@ -65,7 +65,7 @@ type config struct {
 	*dbcsv.Config
 	Concurrency, ChunkSize           int
 	ForceString, JustPrint, Truncate bool
-	LobSource                        bool
+	LobSource, TrimCols              bool
 }
 
 func Main() error {
@@ -84,6 +84,7 @@ func Main() error {
 	flagFields := FS.String("fields", "", "target fields, comma separated names")
 	FS.BoolVar(&cfg.ForceString, "force-string", false, "force all columns to be VARCHAR2")
 	FS.BoolVar(&cfg.JustPrint, "just-print", false, "just print the INSERTs")
+	FS.BoolVar(&cfg.TrimCols, "trim-cols", false, "trim columns")
 	FS.StringVar(&cfg.Copy, "copy", "", "copy this table's structure")
 	FS.IntVar(&cfg.ChunkSize, "chunk-size", defaultChunkSize, "chunk size - number of rows inserted at once")
 	FS.Var(&verbose, "v", "verbose logging")
@@ -320,8 +321,15 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 				buf.Reset()
 				col := cols[j]
 				if col.Type != Date {
+					truncCol := cfg.TrimCols && col.Truncable()
+					if truncCol {
+						buf.WriteString("SUBSTR(")
+					}
 					if err = quote(&buf, s); err != nil {
 						return err
+					}
+					if truncCol {
+						fmt.Fprintf(&buf, ", 1, %d)", col.Length)
 					}
 				} else {
 					buf.WriteString("TO_DATE('")
@@ -379,11 +387,15 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 			buf.WriteString(c.Name)
 		}
 		buf.WriteString(") VALUES (")
-		for i := range columns {
+		for i, c := range columns {
 			if i != 0 {
 				buf.WriteString(", ")
 			}
-			fmt.Fprintf(&buf, ":%d", i+1)
+			if cfg.TrimCols && c.Truncable() {
+				fmt.Fprintf(&buf, "SUBSTR(:%d, 1, %d)", i+1, c.Length)
+			} else {
+				fmt.Fprintf(&buf, ":%d", i+1)
+			}
 		}
 		buf.WriteString(")")
 		qry = buf.String()
@@ -803,6 +815,10 @@ func (t Type) String() string {
 	}
 }
 
+func (c Column) Truncable() bool {
+	return c.Length > 0 && (c.DataType == "CHAR" || c.DataType == "VARCHAR2")
+}
+
 func (c Column) FromString(ss []string) (any, error) {
 	if c.DataType == "DATE" || strings.HasPrefix(c.DataType, "TIMESTAMP") || c.Type == Date {
 		res := make([]sql.NullTime, len(ss))
@@ -890,9 +906,9 @@ func (c Column) FromString(ss []string) (any, error) {
 func getColumns(ctx context.Context, db *sql.DB, tbl string) ([]Column, error) {
 	owner, tbl := tableSplitOwner(strings.ToUpper(tbl))
 	// TODO(tgulacsi): this is Oracle-specific!
-	const qry = `SELECT column_name, data_type, data_length, data_precision, data_scale, nullable 
-		FROM all_tab_cols 
-		WHERE table_name = UPPER(:1) AND owner = NVL(:2, SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')) 
+	const qry = `SELECT column_name, data_type, data_length, data_precision, data_scale, nullable
+		FROM all_tab_cols
+		WHERE table_name = UPPER(:1) AND owner = NVL(:2, SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA'))
 		ORDER BY nullable, column_id`
 	rows, err := db.QueryContext(ctx, qry, tbl, owner)
 	if err != nil {
