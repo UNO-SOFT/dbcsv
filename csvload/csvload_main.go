@@ -256,27 +256,30 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 	logger.Debug("fields", "fields", fields)
 
 	if cfg.JustPrint {
-		fmt.Println("INSERT ALL")
 		cols, err := getColumns(defCtx, db, tbl)
 		if err != nil {
 			return err
 		}
 		var buf strings.Builder
 		var pattern string
+		var skipFirst bool
 		if tblFullInsert {
+			// logger.Warn("full")
 			i := strings.Index(tbl, "VALUES")
-			j := strings.LastIndexByte(tbl[:i], ')')
+			// j := strings.LastIndexByte(tbl[:i], ')')
 			pattern = strings.TrimSpace(tbl[i:])
 			for i := range cols {
-				pattern = strings.Replace(pattern, fmt.Sprintf(":%d", i+1), "%s", 1)
+				pattern = strings.Replace(pattern, fmt.Sprintf(":%d", i+1), "%s", 1) + ";"
 			}
-			pattern = strings.TrimSpace(strings.TrimPrefix(tbl[:j+1], "INSERT")) + pattern + "\n"
+			// pattern = strings.TrimSpace(strings.TrimPrefix(tbl[:j+1], "INSERT")) + pattern + "\n"
 		} else {
 			cols = filterCols(cols, fields)
+			// logger.Warn("not full", "cols", cols)
 			if len(cols) == 0 {
 				for _, nm := range firstRow.Columns {
 					cols = append(cols, Column{Name: nm})
 				}
+				skipFirst = true
 			} else {
 				colMap := make(map[string]Column, len(cols))
 				for _, col := range cols {
@@ -293,7 +296,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 				}
 				buf.WriteString(col.Name)
 			}
-			pattern = "  INTO " + tbl + " (" + buf.String() + ") VALUES ("
+			pattern = "INSERT INTO " + tbl + " (" + buf.String() + ") VALUES ("
 
 			buf.Reset()
 			for j := range cols {
@@ -302,11 +305,15 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 				}
 				buf.WriteString("%s")
 			}
-			pattern += buf.String() + ")\n"
+			pattern += buf.String() + ");\n"
 		}
 
 		dRepl := strings.NewReplacer(".", "", "-", "")
 		for row := range rows {
+			if skipFirst {
+				skipFirst = false
+				continue
+			}
 			allEmpty := true
 			for i, s := range row.Values {
 				row.Values[i] = s
@@ -348,7 +355,7 @@ func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields 
 			}
 			fmt.Printf(pattern, vals...)
 		}
-		fmt.Println("SELECT 1 FROM DUAL;")
+		// fmt.Println("SELECT 1 FROM DUAL;")
 		return nil
 	}
 
