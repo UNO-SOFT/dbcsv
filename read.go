@@ -52,7 +52,7 @@ func init() {
 func EncFromName(e string) (NamedEncoding, error) {
 	switch strings.NewReplacer("-", "", "_", "").Replace(strings.ToLower(e)) {
 	case "", "utf8":
-		return NamedEncoding{Encoding: unicode.UTF8BOM, Name: "utf-8"}, nil
+		return NamedEncoding{Encoding: utf8ReadBOM{}, Name: "utf-8"}, nil
 	case "iso88591":
 		return NamedEncoding{Encoding: charmap.ISO8859_1, Name: "iso-8859-1"}, nil
 	case "iso88592":
@@ -744,5 +744,12 @@ type StringsValue struct {
 
 func (ss StringsValue) String() string      { return fmt.Sprintf("%v", ss.Strings) }
 func (ss *StringsValue) Set(s string) error { ss.Strings = append(ss.Strings, s); return nil }
+
+type utf8ReadBOM struct{}
+
+var _ encoding.Encoding = utf8ReadBOM{}
+
+func (utf8ReadBOM) NewEncoder() *encoding.Encoder { return unicode.UTF8.NewEncoder() }
+func (utf8ReadBOM) NewDecoder() *encoding.Decoder { return unicode.UTF8BOM.NewDecoder() }
 
 // vim: set noet fileencoding=utf-8:
