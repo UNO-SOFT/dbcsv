@@ -77,6 +77,18 @@ func Main() error {
 	}
 
 	cfg := config{Config: new(dbcsv.Config)}
+	appFS := flag.NewFlagSet("csvload", flag.ContinueOnError)
+	appFS.StringVar(&cfg.Charset, "charset", encName, "input charset")
+	appFS.StringVar(&cfg.Delim, "delim", "", "CSV separator")
+	appFS.IntVar(&cfg.Concurrency, "concurrency", 4, "concurrency")
+	appFS.StringVar(&dateFormat, "date", dateFormat, "date format, in Go notation")
+	appFS.IntVar(&cfg.Skip, "skip", 0, "skip rows")
+	appFS.IntVar(&cfg.Sheet, "sheet", 0, "sheet of spreadsheet")
+	appFS.StringVar(&cfg.ColumnsString, "columns", "", "columns, comma separated indexes")
+	flagMemProf := appFS.String("memprofile", "", "file to output memory profile to")
+	flagCPUProf := appFS.String("cpuprofile", "", "file to output CPU profile to")
+	appFset := ff.NewFlagSetFrom(appFS.Name(), appFS)
+
 	FS := flag.NewFlagSet("load", flag.ContinueOnError)
 	flagConnect := FS.String("connect", os.Getenv("DB_ID"), "database to connect to")
 	FS.BoolVar(&cfg.Truncate, "truncate", false, "truncate table")
@@ -94,8 +106,10 @@ func Main() error {
 			*flagConnect = os.Getenv("BRUNO_ID")
 		}
 	}
+	fset := ff.NewFlagSetFrom(FS.Name(), FS)
+	fset.SetParent(appFset)
 	loadCmd := ff.Command{Name: "load",
-		Flags: ff.NewFlagSetFrom(FS.Name(), FS),
+		Flags: fset,
 		Exec: func(ctx context.Context, args []string) error {
 			if len(args) != 2 {
 				return errors.New("need two args: the table and the source")
@@ -117,7 +131,9 @@ func Main() error {
 		},
 	}
 
-	sheetCmd := ff.Command{Name: "sheet",
+	fset = ff.NewFlagSet("sheet")
+	fset.SetParent(appFset)
+	sheetCmd := ff.Command{Name: "sheet", Flags: fset,
 		Exec: func(ctx context.Context, args []string) error {
 			if err := cfg.Config.Open(args[0]); err != nil {
 				return err
@@ -139,24 +155,21 @@ func Main() error {
 		},
 	}
 
-	FS = flag.NewFlagSet("csvload", flag.ContinueOnError)
-	FS.StringVar(&cfg.Charset, "charset", encName, "input charset")
-	FS.StringVar(&cfg.Delim, "delim", "", "CSV separator")
-	FS.IntVar(&cfg.Concurrency, "concurrency", 4, "concurrency")
-	FS.StringVar(&dateFormat, "date", dateFormat, "date format, in Go notation")
-	FS.IntVar(&cfg.Skip, "skip", 0, "skip rows")
-	FS.IntVar(&cfg.Sheet, "sheet", 0, "sheet of spreadsheet")
-	FS.StringVar(&cfg.ColumnsString, "columns", "", "columns, comma separated indexes")
-	flagMemProf := FS.String("memprofile", "", "file to output memory profile to")
-	flagCPUProf := FS.String("cpuprofile", "", "file to output CPU profile to")
-	app := ff.Command{Name: "csvload",
+	app := ff.Command{Name: "csvload", Flags: appFset,
 		Usage:       "load from csv/xls/ods into database table",
-		Flags:       ff.NewFlagSetFrom(FS.Name(), FS),
-		Exec:        func(ctx context.Context, args []string) error { return loadCmd.Exec(ctx, args) },
 		Subcommands: []*ff.Command{&loadCmd, &sheetCmd},
 	}
 
 	args := os.Args[1:]
+	var foundSubcommand bool
+	for _, a := range args {
+		if foundSubcommand = a == "-h" || a == "load" || a == "sheet"; foundSubcommand {
+			break
+		}
+	}
+	if !foundSubcommand {
+		args = append(append(make([]string, 0, 1+len(args)), "load"), args...)
+	}
 	if err := app.Parse(args); err != nil {
 		if errors.Is(err, ff.ErrHelp) {
 			ffhelp.Command(&app).WriteTo(os.Stderr)
