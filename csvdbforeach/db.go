@@ -182,7 +182,7 @@ func getQuery(db querier, fun string, fixParams [][2]string) (Statement, error) 
 					'0' <= r && r <= '9' ||
 					len(nm) > 0 && r == '_' {
 					nm = append(nm, byte(r))
-				} else {
+				} else if len(nm) > 0 {
 					names = append(names, string(nm))
 					nm = nm[:0]
 					state = 0
