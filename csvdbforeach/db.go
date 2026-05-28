@@ -1,4 +1,4 @@
-// Copyright 2020 Tamás Gulácsi.
+// Copyright 2020, 2026 Tamás Gulácsi.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/csv"
 	"fmt"
@@ -34,7 +35,7 @@ func safeConvert(conv func(string) (any, error), s string) (v any, err error) {
 	return conv(s)
 }
 
-func dbExec(db *sql.DB, fun string, fixParams [][2]string, retOk int64, rows <-chan dbcsv.Row, oneTx bool) (int, error) {
+func dbExec(ctx context.Context, db *sql.DB, fun string, fixParams [][2]string, retOk int64, rows <-chan dbcsv.Row, oneTx bool) (int, error) {
 	st, err := getQuery(db, fun, fixParams)
 	if err != nil {
 		return 0, err
@@ -61,13 +62,13 @@ func dbExec(db *sql.DB, fun string, fixParams [][2]string, retOk int64, rows <-c
 	for row := range rows {
 		logger.Debug("dbExec", "row", row)
 		if tx == nil {
-			if tx, err = db.Begin(); err != nil {
+			if tx, err = db.BeginTx(ctx, nil); err != nil {
 				return n, err
 			}
 			if stmt != nil {
 				stmt.Close()
 			}
-			if stmt, err = tx.Prepare(st.Qry); err != nil {
+			if stmt, err = tx.PrepareContext(ctx, st.Qry); err != nil {
 				tx.Rollback()
 				return n, err
 			}
@@ -96,7 +97,7 @@ func dbExec(db *sql.DB, fun string, fixParams [][2]string, retOk int64, rows <-c
 		values = append(values, st.FixParams...)
 		//log.Printf("%q %#v", st.Qry, values)
 		logger.Info("Exec", "values", values)
-		if _, err = stmt.Exec(values...); err != nil {
+		if _, err = stmt.ExecContext(ctx, values...); err != nil {
 			logger.Error("execute", "qry", st.Qry, "line", row.Line, "values", values, "error", err)
 			return n, fmt.Errorf("qry=%q params=%#v: %w", st.Qry, values, err)
 		}
@@ -159,10 +160,12 @@ func getQuery(db querier, fun string, fixParams [][2]string) (Statement, error) 
 	args := make([]Arg, 0, 32)
 	fun = strings.TrimSpace(fun)
 
-	if strings.HasPrefix(fun, "BEGIN ") && strings.HasSuffix(fun, "END;") {
+	if stDeclare := strings.HasPrefix(fun, "DECLARE"); strings.HasSuffix(fun, "END;") && (stDeclare || strings.HasPrefix(fun, "BEGIN ")) {
 		st.Qry = fun
-		if i := strings.IndexByte(fun, '('); i >= 0 && strings.Contains(fun[5:i], ":=") { //function
-			st.Returns = true
+		if !stDeclare {
+			if i := strings.IndexByte(fun, '('); i >= 0 && strings.Contains(fun[5:i], ":=") { //function
+				st.Returns = true
+			}
 		}
 		var nm []byte
 		var state uint8
