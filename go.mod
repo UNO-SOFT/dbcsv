@@ -1,6 +1,6 @@
 module github.com/UNO-SOFT/dbcsv
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/UNO-SOFT/spreadsheet v0.1.9
@@ -11,8 +11,8 @@ require (
 	github.com/klauspost/compress v1.18.1
 	golang.org/x/crypto v0.44.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
-	golang.org/x/sync v0.18.0
-	golang.org/x/text v0.31.0
+	golang.org/x/sync v0.21.0
+	golang.org/x/text v0.39.0
 )
 
 require (
