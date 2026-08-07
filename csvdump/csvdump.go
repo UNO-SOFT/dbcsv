@@ -21,7 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/sync/errgroup"
 	"golang.org/x/text/encoding"
 
 	"github.com/google/renameio/v2"
@@ -288,7 +287,6 @@ and dump all the columns of the cursor returned by the function.
 			defer w.Close()
 		}
 
-		grp, grpCtx := errgroup.WithContext(ctx)
 		for sheetNo := range queries {
 			qry, name := queries[sheetNo].Query, queries[sheetNo].Name
 			if name == "" {
@@ -301,8 +299,8 @@ and dump all the columns of the cursor returned by the function.
 				}
 				defer Q.Close()
 
-				shortCtx, shortCancel := context.WithTimeout(grpCtx, time.Hour)
-				err = executeCommands(shortCtx, wfh, queueNext(grpCtx, Q))
+				shortCtx, shortCancel := context.WithTimeout(ctx, time.Hour)
+				err = executeCommands(shortCtx, wfh, queueNext(ctx, Q))
 				shortCancel()
 				Q.Close()
 				if err != nil {
@@ -311,7 +309,7 @@ and dump all the columns of the cursor returned by the function.
 				continue
 			}
 
-			rows, columns, qErr := doQuery(grpCtx, tx, qry, params, *flagCall, *flagSort)
+			rows, columns, qErr := doQuery(ctx, tx, qry, params, *flagCall, *flagSort)
 			if qErr != nil {
 				err = qErr
 				break
@@ -344,20 +342,19 @@ and dump all the columns of the cursor returned by the function.
 				err = sErr
 				break
 			}
-			grp.Go(func() error {
-				logger.Debug("DumpSheet", "name", name, "qry", qry)
-				err := dbcsv.DumpSheet(grpCtx, sheet, rows, columns)
-				rows.Close()
-				if closeErr := sheet.Close(); closeErr != nil && err == nil {
-					return closeErr
-				}
-				return err
-			})
+			logger.Debug("DumpSheet", "name", name, "qry", qry)
+			err = dbcsv.DumpSheet(ctx, sheet, rows, columns)
+			rows.Close()
+			if closeErr := sheet.Close(); closeErr != nil && err == nil {
+				err = closeErr
+			}
+			if err != nil {
+				break
+			}
 		}
 		if err != nil {
 			return err
 		}
-		err = grp.Wait()
 		if w != nil {
 			if closeErr := w.Close(); closeErr != nil && err == nil {
 				err = closeErr
