@@ -22,7 +22,7 @@ import (
 	"github.com/UNO-SOFT/zlog/v2"
 	"github.com/UNO-SOFT/zlog/v2/slog"
 
-	"github.com/godror/godror"
+	_ "github.com/oracle/go-oracledb/v26/oracle"
 )
 
 func DumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column, header bool, sep string, raw bool) error {
@@ -158,22 +158,48 @@ func (col Column) Converter(sep string) Stringer {
 	return &ValString{Sep: sep}
 }
 
-type Stringer interface {
-	String() string
-	Pointer() any
-	sql.Scanner
-	driver.Valuer
-}
-type ValNumber struct {
-	Sep   string
-	value godror.Number
-}
+type (
+	Stringer interface {
+		String() string
+		Pointer() any
+		sql.Scanner
+		driver.Valuer
+	}
+	Number    string
+	ValNumber struct {
+		Sep   string
+		value Number
+	}
+)
 
 func (v ValNumber) Value() (driver.Value, error) { return spreadsheet.Number(v.value), nil }
 func (v ValNumber) String() string               { return csvQuoteString(v.Sep, string(v.value)) }
 func (v ValNumber) StringRaw() string            { return string(v.value) }
 func (v *ValNumber) Pointer() any                { return &v.value }
-func (v *ValNumber) Scan(x any) error            { return v.value.Scan(x) }
+func (N *ValNumber) Scan(x any) error {
+	v, err := driver.DefaultParameterConverter.ConvertValue(x)
+	if err != nil {
+		return err
+	}
+	switch x := v.(type) {
+	case string:
+		N.value = Number(x)
+	case int64:
+		N.value = Number(strconv.FormatInt(x, 10))
+	case float64:
+		N.value = Number(strconv.FormatFloat(x, 'f', -1, 32))
+	case bool:
+		if x {
+			N.value = "1"
+		} else {
+			N.value = "0"
+		}
+	case []byte:
+		N.value = Number(x)
+	}
+	N.Pointer()
+	return nil
+}
 
 type ValString struct {
 	Sep   string

@@ -25,7 +25,8 @@ import (
 
 	"github.com/UNO-SOFT/dbcsv"
 	"github.com/UNO-SOFT/zlog/v2"
-	"github.com/godror/godror"
+
+	_ "github.com/oracle/go-oracledb/v26/oracle"
 )
 
 const DefaultFetchRowCount = 8
@@ -97,7 +98,7 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 			params = append(params, sql.Named(strings.ToLower(s[:i]), s[i+1:]))
 		}
 	}
-	db, err := sql.Open("godror", *flagConnect)
+	db, err := sql.Open("oracledb", *flagConnect)
 	if err != nil {
 		return fmt.Errorf("%s: %w", *flagConnect, err)
 	}
@@ -198,7 +199,7 @@ func doQuery(ctx context.Context, db queryExecer, qry string, fetchRowCount int,
 	if fetchRowCount <= 0 {
 		fetchRowCount = DefaultFetchRowCount
 	}
-	params = append(params, godror.FetchRowCount(fetchRowCount))
+	params = append(params)
 	rows, err := db.QueryContext(ctx, qry, params...)
 	if err != nil {
 		return nil, fmt.Errorf("%q: %w", qry, err)

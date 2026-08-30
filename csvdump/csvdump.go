@@ -14,12 +14,10 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"golang.org/x/text/encoding"
 
@@ -27,7 +25,8 @@ import (
 	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/compress/zstd"
 
-	"github.com/godror/godror"
+	"github.com/godror/odbwrap"
+	"github.com/oracle/go-oracledb/v26/oracle"
 
 	"github.com/UNO-SOFT/dbcsv"
 	"github.com/UNO-SOFT/spreadsheet"
@@ -66,7 +65,6 @@ func Main() error {
 	flagCompress := flag.String("compress", "", "compress output with gz/gzip or zst/zstd/zstandard")
 	flagCall := flag.Bool("call", false, "the first argument is not the WHERE, but the PL/SQL block to be called, the followings are not the columns but the arguments")
 	flagRemote := flag.Bool("remote", false, `the rows are XLSX commands in JSON {"c":"command_name", "a":[{"f":"float_value","s":"string_value", "i":"int_value"}]} format`)
-	flagAQ := flag.Bool("aq", false, "get the remote commands from AQ/correlation")
 	flagTimeout := flag.Duration("timeout", 0, "timeout")
 
 	flag.Usage = func() {
@@ -129,7 +127,7 @@ and dump all the columns of the cursor returned by the function.
 
 	var queries []Query
 	var params []any
-	db, err := sql.Open("godror", *flagConnect)
+	db, err := sql.Open("oracledb", *flagConnect)
 	if err != nil {
 		return fmt.Errorf("%s: %w", *flagConnect, err)
 	}
@@ -147,18 +145,7 @@ and dump all the columns of the cursor returned by the function.
 				queries[i] = Query{Query: q}
 			}
 		}
-		if *flagAQ {
-			Q := queries[0]
-			Q.ParseQueue()
-			queries[0] = Q
-			for i, q := range queries[1:] {
-				q.ParseQueue()
-				if q.QueueName == "" {
-					q.QueueName = Q.QueueName
-				}
-				queries[i+1] = q
-			}
-		} else if *flagCall {
+		if *flagCall {
 			Q := queries[0]
 			Q.Query, params = splitParamArgs(Q.Query, args)
 			queries[0] = Q
@@ -172,10 +159,6 @@ and dump all the columns of the cursor returned by the function.
 		qry, params = splitParamArgs(args[0], args[1:])
 		logger.Debug("call", "qry", qry, "params", params)
 		queries = append(queries, Query{Query: qry})
-	} else if *flagAQ {
-		Q := Query{Query: args[0]}
-		Q.ParseQueue()
-		queries = append(queries, Q)
 	} else {
 		params = make([]any, len(flagParams.Strings))
 		for i, p := range flagParams.Strings {
@@ -238,10 +221,6 @@ and dump all the columns of the cursor returned by the function.
 		}
 	}
 	defer tx.Rollback()
-	if logger.Enabled(ctx, slog.LevelDebug) {
-		godror.SetLogger(logger.With("lib", "godror"))
-		defer godror.SetLogger(zlog.Discard().SLog())
-	}
 
 	if len(flagSheets.Strings) == 0 &&
 		!strings.HasSuffix(origFn, ".ods") &&
@@ -249,27 +228,18 @@ and dump all the columns of the cursor returned by the function.
 		w := encoding.ReplaceUnsupported(enc.NewEncoder()).Writer(wfh)
 		logger.Debug("encoding", "env", dbcsv.DefaultEncoding.Name)
 
-		if queries[0].QueueName != "" {
-			Q, openErr := queries[0].OpenQueue(ctx, tx)
-			if openErr != nil {
-				return openErr
-			}
-			defer Q.Close()
-			err = dumpRemoteCSVQueue(ctx, w, Q, *flagSep)
+		rows, columns, qErr := doQuery(ctx, tx, queries[0].Query, params, *flagCall, *flagSort)
+		if qErr != nil {
+			err = qErr
 		} else {
-			rows, columns, qErr := doQuery(ctx, tx, queries[0].Query, params, *flagCall, *flagSort)
-			if qErr != nil {
-				err = qErr
-			} else {
-				defer rows.Close()
-				if *flagRemote {
-					if len(columns) != 1 {
-						return fmt.Errorf("-remote wants the queries to have only one column, this has %d", len(columns))
-					}
-					err = dumpRemoteCSV(ctx, w, rows, *flagSep)
-				} else {
-					err = dbcsv.DumpCSV(ctx, w, rows, columns, *flagHeader, *flagSep, *flagRaw)
+			defer rows.Close()
+			if *flagRemote {
+				if len(columns) != 1 {
+					return fmt.Errorf("-remote wants the queries to have only one column, this has %d", len(columns))
 				}
+				err = dumpRemoteCSV(ctx, w, rows, *flagSep)
+			} else {
+				err = dbcsv.DumpCSV(ctx, w, rows, columns, *flagHeader, *flagSep, *flagRaw)
 			}
 		}
 	} else {
@@ -292,23 +262,6 @@ and dump all the columns of the cursor returned by the function.
 			if name == "" {
 				name = strconv.Itoa(sheetNo + 1)
 			}
-			if *flagAQ {
-				Q, err := queries[sheetNo].OpenQueue(ctx, tx)
-				if err != nil {
-					return err
-				}
-				defer Q.Close()
-
-				shortCtx, shortCancel := context.WithTimeout(ctx, time.Hour)
-				err = executeCommands(shortCtx, wfh, queueNext(ctx, Q))
-				shortCancel()
-				Q.Close()
-				if err != nil {
-					break
-				}
-				continue
-			}
-
 			rows, columns, qErr := doQuery(ctx, tx, qry, params, *flagCall, *flagSort)
 			if qErr != nil {
 				err = qErr
@@ -411,20 +364,20 @@ type execer interface {
 type queryExecer interface {
 	queryer
 	execer
+	Driver() driver.Driver
 }
 
-func doQuery(ctx context.Context, db queryExecer, qry string, params []any, isCall, doSort bool) (*sql.Rows, []dbcsv.Column, error) {
+func doQuery(ctx context.Context, db *sql.Tx, qry string, params []any, isCall, doSort bool) (*sql.Rows, []dbcsv.Column, error) {
 	var rows *sql.Rows
 	var err error
-	const defaultBatchSize = 1024
-	batchSize := defaultBatchSize
 	if isCall {
 		var dRows driver.Rows
-		params = append(append(make([]any, 0, 2+len(params)),
-			sql.Out{Dest: &dRows}, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize+1)),
+		params = append(append(make([]any, 0, 1+len(params)),
+			sql.Out{Dest: &dRows}),
 			params...)
 		if _, err = db.ExecContext(ctx, qry, params...); err == nil {
-			rows, err = godror.WrapRows(ctx, db, dRows)
+			d, _ := odbwrap.WrapDriver(oracle.GetDefaultDriver())
+			rows, err = d.WrapRows(ctx, db, dRows)
 		} else {
 			logger.Error("call", "qry", qry, "params", fmt.Sprintf("%#v", params), "error", err)
 		}
@@ -459,40 +412,8 @@ func doQuery(ctx context.Context, db queryExecer, qry string, params []any, isCa
 				qry = bld.String()
 			}
 		}
-		{
-			var lastIsSpace bool
-			qry := strings.Map(func(r rune) rune {
-				if r == ' ' || r == '\n' || r == '\r' || r == '\t' || r == '\v' {
-					if lastIsSpace {
-						return -1
-					}
-					lastIsSpace = true
-					return ' '
-				}
-				lastIsSpace = false
-				if 'a' <= r && r <= 'z' {
-					return r - 'a' + 'A'
-				}
-				return r
-			},
-				qry)
-			//log.Println(qry)
-			if i := strings.Index(qry, " FETCH FIRST "); i >= 0 {
-				qry = strings.TrimSpace(qry[i+len(" FETCH FIRST "):])
-				i = strings.Index(qry, " ROWS ONLY")
-				if i < 0 {
-					i = strings.Index(qry, " ROW ONLY")
-				}
-				if i >= 0 {
-					if n, err := strconv.ParseUint(qry[:i], 10, 32); err == nil && n != 0 {
-						batchSize = int(n)
-					}
-				}
-			}
-		}
 		qry = strings.TrimSuffix(strings.TrimSpace(qry), ";")
 		//log.Println("QRY:", qry, "batchSize:", batchSize)
-		params = append(params, godror.FetchRowCount(batchSize), godror.PrefetchCount(batchSize+1))
 		if rows, err = db.QueryContext(ctx, qry, params...); err != nil {
 			qry = origQry
 			rows, err = db.QueryContext(ctx, qry, params...)
@@ -541,8 +462,7 @@ func splitParamArgs(fun string, args []string) (plsql string, params []any) {
 }
 
 type Query struct {
-	Query, Name            string
-	QueueName, Correlation string
+	Query, Name string
 }
 
 // vim: se noet fileencoding=utf-8:

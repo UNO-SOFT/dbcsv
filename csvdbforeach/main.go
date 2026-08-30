@@ -27,7 +27,7 @@ import (
 	"github.com/peterbourgon/ff/v4"
 	"github.com/peterbourgon/ff/v4/ffhelp"
 
-	_ "github.com/godror/godror"
+	_ "github.com/oracle/go-oracledb/v26/oracle"
 )
 
 var (
@@ -154,7 +154,7 @@ Usage:
 			})
 
 			dsn := os.ExpandEnv(*flagConnect)
-			db, err := sql.Open("godror", dsn)
+			db, err := sql.Open("oracledb", dsn)
 			if err != nil {
 				return fmt.Errorf("%s: %w", dsn, err)
 			}

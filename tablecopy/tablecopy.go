@@ -20,7 +20,7 @@ import (
 
 	"github.com/UNO-SOFT/zlog/v2"
 	"github.com/UNO-SOFT/zlog/v2/slog"
-	godror "github.com/godror/godror"
+	_ "github.com/oracle/go-oracledb/v26/oracle"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -151,7 +151,7 @@ will execute a "SELECT * FROM Source_table@source_db WHERE F_ield=1" and an "INS
 		}
 	}
 
-	srcP, err := godror.ParseDSN(*flagSource)
+	srcP, err := oracle.ParseDSN(*flagSource)
 	if err != nil {
 		return fmt.Errorf("%q: %w", *flagSource, err)
 	}
@@ -323,8 +323,7 @@ func One(ctx context.Context, dstTx, srcTx *sql.Tx, task copyTask, batchSize int
 	if batchSize < 1 {
 		batchSize = DefaultBatchSize
 	}
-	rows, err := srcTx.QueryContext(ctx, srcQry,
-		godror.FetchArraySize(batchSize), godror.PrefetchCount(batchSize+1))
+	rows, err := srcTx.QueryContext(ctx, srcQry)
 	if err != nil {
 		return n, fmt.Errorf("%s: %w", srcQry, err)
 	}

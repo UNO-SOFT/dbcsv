@@ -26,7 +26,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/godror/godror"
+	_ "github.com/oracle/go-oracledb/v26/oracle"
 
 	"github.com/UNO-SOFT/dbcsv"
 )
@@ -719,10 +719,16 @@ func (c Column) FromString(ss []string) (any, error) {
 	}
 
 	if c.DataType == tCLOB || c.DataType == tBLOB {
-		isClob := c.DataType == tCLOB
-		res := make([]godror.Lob, len(ss))
+		if isClob := c.DataType == tCLOB; isClob {
+			res := make([]string, len(ss))
+			for i, s := range ss {
+				res[i] = s
+			}
+			return res, nil
+		}
+		res := make([][]byte, len(ss))
 		for i, s := range ss {
-			res[i] = godror.Lob{IsClob: isClob, Reader: strings.NewReader(s)}
+			res[i] = []byte(s)
 		}
 		return res, nil
 	}
@@ -733,9 +739,9 @@ func (c Column) FromString(ss []string) (any, error) {
 func getColumns(ctx context.Context, db *sql.DB, tbl string) ([]Column, error) {
 	owner, tbl := tableSplitOwner(strings.ToUpper(tbl))
 	// TODO(tgulacsi): this is Oracle-specific!
-	const qry = `SELECT column_name, data_type, data_length, data_precision, data_scale, nullable 
-		FROM all_tab_cols 
-		WHERE table_name = UPPER(:1) AND owner = NVL(:2, SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')) 
+	const qry = `SELECT column_name, data_type, data_length, data_precision, data_scale, nullable
+		FROM all_tab_cols
+		WHERE table_name = UPPER(:1) AND owner = NVL(:2, SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA'))
 		ORDER BY nullable, column_id`
 	rows, err := db.QueryContext(ctx, qry, tbl, owner)
 	if err != nil {
@@ -864,9 +870,9 @@ func (cfg Config) Open(ctx context.Context, db *sql.DB, fn string) (err error) {
 			}
 		}()
 		qry := strings.TrimSpace(fn)
-		var lob godror.Lob
+		var lob string
 		if len(qry) > len("SELECT") && (strings.EqualFold(qry[:len("SELECT")], "SELECT") || strings.EqualFold(qry[:len("WITH")], "WITH")) {
-			rows, err := db.QueryContext(ctx, qry, godror.LobAsReader())
+			rows, err := db.QueryContext(ctx, qry)
 			if err != nil {
 				return fmt.Errorf("query %s: %w", qry, err)
 			}
@@ -874,17 +880,15 @@ func (cfg Config) Open(ctx context.Context, db *sql.DB, fn string) (err error) {
 			if !rows.Next() {
 				return io.EOF
 			}
-			var lobI any
-			if err = rows.Scan(&lobI); err != nil {
+			if err = rows.Scan(&lob); err != nil {
 				return fmt.Errorf("scan %s: %w", qry, err)
 			}
-			lob = *(lobI.(*godror.Lob))
 		} else {
 			if _, err = db.ExecContext(ctx, qry, sql.Out{Dest: &lob}); err != nil {
 				return fmt.Errorf("exec %s: %w", qry, err)
 			}
 		}
-		if _, err = io.Copy(fh, lob); err != nil {
+		if _, err = fh.WriteString(lob); err != nil {
 			return err
 		}
 		if _, err = fh.Seek(0, 0); err != nil {

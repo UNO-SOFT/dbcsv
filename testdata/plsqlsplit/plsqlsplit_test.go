@@ -13,7 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/godror/godror"
+	"github.com/oracle/go-oracledb/v26/oracle"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
 )
@@ -31,7 +31,7 @@ func FuzzClob2CSV(f *testing.F) {
 	flagParseOnce.Do(func() { flag.Parse() })
 
 	comma = []rune(*flagSep)[0]
-	db, err := sql.Open("godror", *flagConnect)
+	db, err := sql.Open("oracledb", *flagConnect)
 	if err != nil {
 		f.Fatalf("connect to %q: %+v", *flagConnect, err)
 	}
@@ -46,7 +46,7 @@ func FuzzClob2CSV(f *testing.F) {
 func TestClob2CSV(t *testing.T) {
 	flagParseOnce.Do(func() { flag.Parse() })
 
-	db, err := sql.Open("godror", *flagConnect)
+	db, err := sql.Open("oracledb", *flagConnect)
 	if err != nil {
 		t.Fatalf("connect to %q: %+v", *flagConnect, err)
 	}
