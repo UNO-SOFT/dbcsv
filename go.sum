@@ -20,6 +20,14 @@ github.com/go-logr/zerologr v1.2.3 h1:up5N9vcH9Xck3jJkXzgyOxozT14R47IyDODz8LM1KS
 github.com/go-logr/zerologr v1.2.3/go.mod h1:BxwGo7y5zgSHYR1BjbnHPyF/5ZjVKfKxAZANVu6E8Ho=
 github.com/godror/odbwrap v0.0.0-20260830180037-ea099adbdcda h1:EV5U5gA5k9EPk6AaFstPPA2oHIv76+tJIg031JdEKbM=
 github.com/godror/odbwrap v0.0.0-20260830180037-ea099adbdcda/go.mod h1:jK+HfNZyX004sz2pGdiz6kG5RWz9XzEuVnKjYHpgbDU=
+github.com/godror/odbwrap v0.0.0-20260902093602-e9e766ed6ca3 h1:KJT3XrerV5qA2ZR0qY9DPHJ77NvcG3u3+3IYX0/7EcU=
+github.com/godror/odbwrap v0.0.0-20260902093602-e9e766ed6ca3/go.mod h1:DOWqZ2pOKX5dqmW2/VK/jUekSve5Gs1y3rUrxh3OjHg=
+github.com/godror/odbwrap v0.0.0-20260902093848-275f7c946b1e h1:ciF0w3nVt5Y21BjgfAB8wwNATppTjhOCbRBIYtl1jIU=
+github.com/godror/odbwrap v0.0.0-20260902093848-275f7c946b1e/go.mod h1:DOWqZ2pOKX5dqmW2/VK/jUekSve5Gs1y3rUrxh3OjHg=
+github.com/godror/odbwrap v0.0.0-20260902095552-0f81e81d4ff6 h1:mS1EuzCg2vesbJNyY+4iiEmn2LYO9A0vjXLZafrxmzY=
+github.com/godror/odbwrap v0.0.0-20260902095552-0f81e81d4ff6/go.mod h1:DOWqZ2pOKX5dqmW2/VK/jUekSve5Gs1y3rUrxh3OjHg=
+github.com/godror/odbwrap v0.0.0-20260902104955-66a8bf53c021 h1:nbZRIjihlKdiVNJoZbX29NwXv6gOEmAiJOM0vwgQehM=
+github.com/godror/odbwrap v0.0.0-20260902104955-66a8bf53c021/go.mod h1:DOWqZ2pOKX5dqmW2/VK/jUekSve5Gs1y3rUrxh3OjHg=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
 github.com/google/renameio/v2 v2.0.2 h1:qKZs+tfn+arruZZhQ7TKC/ergJunuJicWS6gLDt/dGw=

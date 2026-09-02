@@ -26,6 +26,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"github.com/godror/odbwrap"
+	"github.com/godror/odbwrap/tnsnames"
 	"github.com/oracle/go-oracledb/v26/oracle"
 
 	"github.com/UNO-SOFT/dbcsv"
@@ -127,7 +128,7 @@ and dump all the columns of the cursor returned by the function.
 
 	var queries []Query
 	var params []any
-	db, err := sql.Open("oracledb", *flagConnect)
+	db, err := tnsnames.OpenDB(*flagConnect)
 	if err != nil {
 		return fmt.Errorf("%s: %w", *flagConnect, err)
 	}

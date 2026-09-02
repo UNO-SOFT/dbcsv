@@ -20,7 +20,7 @@ require (
 	github.com/extrame/goyymmdd v0.0.0-20210114090516-7cc815f00d1a // indirect
 	github.com/extrame/ole2 v0.0.0-20160812065207-d69429661ad7 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
-	github.com/godror/odbwrap v0.0.0-20260830180037-ea099adbdcda // indirect
+	github.com/godror/odbwrap v0.0.0-20260902104955-66a8bf53c021 // indirect
 	github.com/richardlehane/mscfb v1.0.7 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
 	github.com/tiendc/go-deepcopy v1.7.2 // indirect
