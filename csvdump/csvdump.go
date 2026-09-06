@@ -1,7 +1,7 @@
 // Copyright 2020, 2023 Tamás Gulácsi.
 //
 //
-// SPDX-License-Identifier: EUPL-1.2
+// SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Package main in csvdump represents a cursor->csv dumper
 package main

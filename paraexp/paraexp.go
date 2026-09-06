@@ -1,7 +1,7 @@
 // Copyright 2020, 2022 Tamás Gulácsi.
 //
 //
-// SPDX-License-Identifier: EUPL-1.2
+// SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Package main in paraexp represents a parallel query-to-JSON dumper
 package main
