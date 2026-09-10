@@ -18,8 +18,8 @@ import (
 	"github.com/godror/godror"
 )
 
-func dumpRemoteCSVQueue(ctx context.Context, w io.Writer, Q *godror.Queue, sep string) error {
-	return remoteCSV(ctx, w, sep, queueNext(ctx, Q))
+func dumpRemoteCSVQueue(ctx context.Context, w io.Writer, Q *godror.Queue, sep string, stripCC bool) error {
+	return remoteCSV(ctx, w, sep, queueNext(ctx, Q), stripCC)
 }
 
 func queueNext(ctx context.Context, Q *godror.Queue) func() ([]byte, error) {

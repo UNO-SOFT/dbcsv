@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/UNO-SOFT/spreadsheet"
 	"github.com/UNO-SOFT/zlog/v2"
@@ -25,7 +26,7 @@ import (
 	"github.com/godror/godror"
 )
 
-func DumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column, header bool, sep string, raw bool) error {
+func DumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column, header bool, sep string, outputFormat OutputFormat) error {
 	logger := zlog.SFromContext(ctx)
 	sepB := []byte(sep)
 	dest := make([]any, len(columns))
@@ -37,7 +38,7 @@ func DumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column,
 		values[i] = c
 		dest[i] = c.Pointer()
 	}
-	if header && !raw {
+	if header && outputFormat != FormatRaw {
 		for i, col := range columns {
 			if i > 0 {
 				_, _ = bw.Write(sepB)
@@ -60,7 +61,7 @@ func DumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column,
 		if err := rows.Scan(dest...); err != nil {
 			return fmt.Errorf("scan into %#v: %w", dest, err)
 		}
-		if raw {
+		if outputFormat == FormatRaw {
 			for i, data := range dest {
 				if data == nil {
 					continue
@@ -72,6 +73,7 @@ func DumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column,
 				}
 			}
 		} else {
+			stripCC := outputFormat == FormatStripCC
 			for i, data := range dest {
 				if i > 0 {
 					_, _ = bw.Write(sepB)
@@ -79,7 +81,11 @@ func DumpCSV(ctx context.Context, w io.Writer, rows *sql.Rows, columns []Column,
 				if data == nil {
 					continue
 				}
-				_, _ = bw.WriteString(values[i].String())
+				s := values[i].String()
+				if stripCC {
+					s = StripControlChars(s)
+				}
+				_, _ = bw.WriteString(s)
 			}
 		}
 		if _, err := bw.Write([]byte{'\n'}); err != nil {
@@ -361,3 +367,24 @@ func GetColumns(ctx context.Context, rows any) ([]Column, error) {
 	}
 	return cols, nil
 }
+
+func StripControlChars(s string) string {
+	i := strings.IndexFunc(s, unicode.IsControl)
+	if i < 0 {
+		return s
+	}
+	return s[:i] + strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s[i:])
+}
+
+type OutputFormat uint8
+
+const (
+	FormatCSV     = OutputFormat(0)
+	FormatStripCC = OutputFormat(1)
+	FormatRaw     = OutputFormat(2)
+)

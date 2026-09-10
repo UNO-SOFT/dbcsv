@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/UNO-SOFT/dbcsv"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -326,7 +327,7 @@ func (c command) checkArgs(types string) error {
 	return nil
 }
 
-func dumpRemoteCSV(ctx context.Context, w io.Writer, rows *sql.Rows, sep string) error {
+func dumpRemoteCSV(ctx context.Context, w io.Writer, rows *sql.Rows, sep string, stripCC bool) error {
 	return remoteCSV(ctx, w, sep, func() ([]byte, error) {
 		if !rows.Next() {
 			err := rows.Close()
@@ -341,10 +342,10 @@ func dumpRemoteCSV(ctx context.Context, w io.Writer, rows *sql.Rows, sep string)
 		var s string
 		err := rows.Scan(&s)
 		return []byte(s), err
-	})
+	}, stripCC)
 }
 
-func remoteCSV(ctx context.Context, w io.Writer, sep string, next func() ([]byte, error)) error {
+func remoteCSV(ctx context.Context, w io.Writer, sep string, next func() ([]byte, error), stripCC bool) error {
 	var strs []string
 	var arr []any
 	cw := csv.NewWriter(w)
@@ -370,6 +371,11 @@ func remoteCSV(ctx context.Context, w io.Writer, sep string, next func() ([]byte
 			}
 			for _, a := range arr {
 				strs = append(strs, fmt.Sprintf("%v", a))
+			}
+		}
+		if stripCC {
+			for i, s := range strs {
+				strs[i] = dbcsv.StripControlChars(s)
 			}
 		}
 		if err := cw.Write(strs); err != nil {

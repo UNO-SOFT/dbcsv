@@ -67,6 +67,7 @@ func Main() error {
 	flagCall := flag.Bool("call", false, "the first argument is not the WHERE, but the PL/SQL block to be called, the followings are not the columns but the arguments")
 	flagRemote := flag.Bool("remote", false, `the rows are XLSX commands in JSON {"c":"command_name", "a":[{"f":"float_value","s":"string_value", "i":"int_value"}]} format`)
 	flagAQ := flag.Bool("aq", false, "get the remote commands from AQ/correlation")
+	flagStripCC := flag.Bool("strip-control-chars", false, "strip control characters")
 	flagTimeout := flag.Duration("timeout", 0, "timeout")
 
 	flag.Usage = func() {
@@ -255,7 +256,7 @@ and dump all the columns of the cursor returned by the function.
 				return openErr
 			}
 			defer Q.Close()
-			err = dumpRemoteCSVQueue(ctx, w, Q, *flagSep)
+			err = dumpRemoteCSVQueue(ctx, w, Q, *flagSep, *flagStripCC)
 		} else {
 			rows, columns, qErr := doQuery(ctx, tx, queries[0].Query, params, *flagCall, *flagSort)
 			if qErr != nil {
@@ -266,9 +267,15 @@ and dump all the columns of the cursor returned by the function.
 					if len(columns) != 1 {
 						return fmt.Errorf("-remote wants the queries to have only one column, this has %d", len(columns))
 					}
-					err = dumpRemoteCSV(ctx, w, rows, *flagSep)
+					err = dumpRemoteCSV(ctx, w, rows, *flagSep, *flagStripCC)
 				} else {
-					err = dbcsv.DumpCSV(ctx, w, rows, columns, *flagHeader, *flagSep, *flagRaw)
+					outputFormat := dbcsv.FormatCSV
+					if *flagRaw {
+						outputFormat = dbcsv.FormatRaw
+					} else if *flagStripCC {
+						outputFormat = dbcsv.FormatStripCC
+					}
+					err = dbcsv.DumpCSV(ctx, w, rows, columns, *flagHeader, *flagSep, outputFormat)
 				}
 			}
 		}
