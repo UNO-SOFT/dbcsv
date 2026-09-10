@@ -371,14 +371,14 @@ func GetColumns(ctx context.Context, rows any) ([]Column, error) {
 func StripControlChars(s string) string {
 	i := strings.IndexFunc(s, unicode.IsControl)
 	if i < 0 {
-		return s
+		return strings.TrimSpace(s)
 	}
-	return s[:i] + strings.Map(func(r rune) rune {
+	return strings.TrimSpace(s[:i] + strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {
-			return -1
+			return ' '
 		}
 		return r
-	}, s[i:])
+	}, s[i:]))
 }
 
 type OutputFormat uint8
