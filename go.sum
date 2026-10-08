@@ -2,6 +2,12 @@ github.com/UNO-SOFT/ff/v4 v4.0.0-beta.1.us h1:9ae1G6L/Pgk1k0SpI8MZcYqKe+dTgpQ+R5
 github.com/UNO-SOFT/ff/v4 v4.0.0-beta.1.us/go.mod h1:onQJUKipvCyFmZ1rIYwFAh1BhPOvftb1uhvSI7krNLc=
 github.com/UNO-SOFT/spreadsheet v0.1.9 h1:MPJjwjrLFAePBjh4ilYO3EUrSiOsmorcxXTYuoHCAIg=
 github.com/UNO-SOFT/spreadsheet v0.1.9/go.mod h1:RqHPk4mwgi6qVGm5/8w+vn+M5NO2j08u8D6qubQfDc4=
+github.com/UNO-SOFT/spreadsheet v0.1.10-0.20261008123231-868dcae033ff h1:FdNr9CoZLUjqiZETDkrl30RzoRTcHv8yzedCgmL0qHU=
+github.com/UNO-SOFT/spreadsheet v0.1.10-0.20261008123231-868dcae033ff/go.mod h1:RqHPk4mwgi6qVGm5/8w+vn+M5NO2j08u8D6qubQfDc4=
+github.com/UNO-SOFT/spreadsheet v0.1.10-0.20261008123830-7336cb9a9777 h1:mMFgICBhUsW8coAm4NRJzYnD+Gu+aZKYPQEaYVrwE5w=
+github.com/UNO-SOFT/spreadsheet v0.1.10-0.20261008123830-7336cb9a9777/go.mod h1:RqHPk4mwgi6qVGm5/8w+vn+M5NO2j08u8D6qubQfDc4=
+github.com/UNO-SOFT/spreadsheet v0.1.10-0.20261008124401-8d6982c91ca0 h1:DxY3Vh71q8B47ARPhsfwAgG1WQsMI8twN3UTRnaNNKA=
+github.com/UNO-SOFT/spreadsheet v0.1.10-0.20261008124401-8d6982c91ca0/go.mod h1:RqHPk4mwgi6qVGm5/8w+vn+M5NO2j08u8D6qubQfDc4=
 github.com/UNO-SOFT/zlog v0.8.6 h1:Y+XCa9O3mr4xDLTkyT2Fod60FsywKlqAexsdV5JUypo=
 github.com/UNO-SOFT/zlog v0.8.6/go.mod h1:ol94XTwk4pqVtBzcD/aiYh5+Lo+G2zF7izjMY7nWQBI=
 github.com/VictoriaMetrics/easyproto v1.2.0 h1:FJT9uNXA2isppFuJErbLqD306KoFlehl7Wn2dg/6oIE=

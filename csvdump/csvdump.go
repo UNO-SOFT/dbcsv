@@ -51,7 +51,7 @@ func main() {
 
 func Main() error {
 	flagConnect := flag.String("connect", os.Getenv("DB_ID"), "user/passw@sid to connect to")
-	flagDateFormat := flag.String("date", "2006-01-02T15:04:05", "date format, in Go notation")
+	flag.StringVar(&dbcsv.DateFormat, "date", "2006-01-02T15:04:05", "date format, in Go notation")
 	flagSep := flag.String("sep", ",", "separator")
 	flagHeader := flag.Bool("header", true, "print header")
 	flagEnc := flag.String("encoding", dbcsv.DefaultEncoding.Name, "encoding to use for output")
@@ -110,7 +110,6 @@ and dump all the columns of the cursor returned by the function.
 		}
 	}
 
-	dbcsv.DateFormat = *flagDateFormat
 	dbcsv.DateEnd = `"` + strings.NewReplacer(
 		"2006", "9999",
 		"01", "12",
@@ -283,7 +282,8 @@ and dump all the columns of the cursor returned by the function.
 		var w spreadsheet.Writer
 		if strings.HasSuffix(origFn, ".xlsx") {
 			if !*flagRemote {
-				w = xlsx.NewWriter(wfh)
+				logger.Info("xlsx with", "dateFormat", dbcsv.DateFormat)
+				w = xlsx.NewWriter(wfh).SetDateFormat(dbcsv.DateFormat)
 				defer w.Close()
 			}
 		} else {
@@ -349,7 +349,7 @@ and dump all the columns of the cursor returned by the function.
 				err = sErr
 				break
 			}
-			logger.Debug("DumpSheet", "name", name, "qry", qry)
+			logger.Info("DumpSheet", "name", name, "qry", qry, "dateFormat", dbcsv.DateFormat)
 			err = dbcsv.DumpSheet(ctx, sheet, rows, columns)
 			rows.Close()
 			if closeErr := sheet.Close(); closeErr != nil && err == nil {
