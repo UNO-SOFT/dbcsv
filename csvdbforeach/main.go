@@ -10,6 +10,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log/slog"
@@ -24,8 +25,7 @@ import (
 
 	"github.com/UNO-SOFT/dbcsv"
 	"github.com/UNO-SOFT/zlog/v2"
-	"github.com/peterbourgon/ff/v4"
-	"github.com/peterbourgon/ff/v4/ffhelp"
+	"github.com/pressly/cli"
 
 	_ "github.com/godror/godror"
 )
@@ -59,19 +59,24 @@ func Main() error {
 	}
 
 	var cfg dbcsv.Config
-	FS := ff.NewFlagSet("csvdbforeach")
-	FS.IntVar(&cfg.Sheet, 'S', "sheet", 0, "Index of sheet to convert, zero based")
-	flagConnect := FS.StringLong("connect", os.Getenv("DB_ID"), "database connection string")
-	flagFunc := FS.StringLong("call", "DBMS_OUTPUT.PUT_LINE", "function name or code block to be called with each line")
-	flagFixParams := FS.StringLong("fix", "p_file_name=>{{.FileName}}", "fix parameters to add; uses text/template")
-	flagFuncRetOk := FS.IntLong("call-ret-ok", 0, "OK return value")
-	flagOneTx := FS.BoolLongDefault("one-tx", true, "one transaction, or commit after each row")
-	FS.StringVar(&cfg.Delim, 'd', "delim", "", "Delimiter to use between fields")
-	FS.StringVar(&cfg.Charset, 0, "charset", "utf-8", "input charset")
-	FS.IntVar(&cfg.Skip, 0, "skip", 1, "skip first N rows")
-	FS.StringVar(&cfg.ColumnsString, 0, "columns", "", "column numbers to use, separated by comma, in param order, starts with 1")
-	FS.Value('v', "verbose", &verbose, "verbose logging")
-	app := ff.Command{Name: "csvdbforeach", Flags: FS,
+	flags := flag.NewFlagSet("csvdbforeach", flag.ContinueOnError)
+	flags.IntVar(&cfg.Sheet, "sheet", 0, "Index of sheet to convert, zero based")
+	flagConnect := flags.String("connect", os.Getenv("DB_ID"), "database connection string")
+	flagFunc := flags.String("call", "DBMS_OUTPUT.PUT_LINE", "function name or code block to be called with each line")
+	flagFixParams := flags.String("fix", "p_file_name=>{{.FileName}}", "fix parameters to add; uses text/template")
+	flagFuncRetOk := flags.Int("call-ret-ok", 0, "OK return value")
+	flagOneTx := flags.Bool("one-tx", true, "one transaction, or commit after each row")
+	flags.StringVar(&cfg.Delim, "delim", "", "Delimiter to use between fields")
+	flags.StringVar(&cfg.Charset, "charset", "utf-8", "input charset")
+	flags.IntVar(&cfg.Skip, "skip", 1, "skip first N rows")
+	flags.StringVar(&cfg.ColumnsString, "columns", "", "column numbers to use, separated by comma, in param order, starts with 1")
+	flags.Var(&verbose, "verbose", "verbose logging")
+	app := cli.Command{Name: "csvdbforeach", Flags: flags,
+		FlagConfigs: []cli.FlagConfig{
+			{Name: "delim", Short: "d"},
+			{Name: "sheet", Short: "S"},
+			{Name: "verbose", Short: "v"},
+		},
 		Usage: fmt.Sprintf(`%s
 
 	The specified code will be called with the cells as (string) arguments
@@ -81,11 +86,11 @@ Usage:
 	%s [flags] <xlsx/xls/csv-to-be-read>
 `, os.Args[0], os.Args[0]),
 
-		Exec: func(ctx context.Context, args []string) error {
-			if len(args) != 1 {
+		Exec: func(ctx context.Context, state *cli.State) error {
+			if len(state.Args) != 1 {
 				return errors.New("one argument: the filename is needed")
 			}
-			fn := args[0]
+			fn := state.Args[0]
 			ctxData := struct {
 				FileName string
 			}{FileName: fn}
@@ -185,19 +190,11 @@ Usage:
 			*flagConnect = os.Getenv("BRUNO_ID")
 		}
 	}
-	if err := app.Parse(os.Args[1:]); err != nil {
-		ffhelp.Command(&app).WriteTo(os.Stderr)
-		if errors.Is(err, ff.ErrHelp) {
-			return nil
-		}
-		return err
-	}
-
 	ctx, cancel := dbcsv.Wrap(context.Background())
 	defer cancel()
 	ctx = zlog.NewSContext(ctx, logger)
 
-	return app.Run(ctx)
+	return cli.ParseAndRun(ctx, &app, os.Args[1:], nil)
 }
 
 // vim: set fileencoding=utf-8 noet:
