@@ -3,6 +3,7 @@ module github.com/UNO-SOFT/dbcsv
 go 1.27.0
 
 require (
+	github.com/UNO-SOFT/cli v0.0.0-20261009074406-95b18dbd4953
 	github.com/UNO-SOFT/spreadsheet v0.1.10-0.20261008124401-8d6982c91ca0
 	github.com/UNO-SOFT/zlog v0.8.6
 	github.com/extrame/xls v0.0.2-0.20180905092746-539786826ced
@@ -10,7 +11,6 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/google/renameio/v2 v2.0.2
 	github.com/klauspost/compress v1.19.0
-	github.com/peterbourgon/ff/v4 v4.0.0-beta.1
 	github.com/xuri/excelize/v2 v2.11.0
 	golang.org/x/sync v0.21.0
 	golang.org/x/text v0.39.0
@@ -23,7 +23,7 @@ require (
 	github.com/go-logfmt/logfmt v0.6.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/godror/knownpb v0.3.0 // indirect
-	github.com/pressly/cli v0.8.0 // indirect
+	// github.com/pressly/cli v0.8.0 // indirect
 	github.com/richardlehane/mscfb v1.0.7 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
 	github.com/tiendc/go-deepcopy v1.7.2 // indirect
@@ -42,4 +42,6 @@ require (
 // replace github.com/godror/godror => ../../godror/godror
 //replace github.com/UNO-SOFT/spreadsheet => ../../UNO-SOFT/spreadsheet
 
-replace github.com/peterbourgon/ff/v4 v4.0.0-beta.1 => github.com/UNO-SOFT/ff/v4 v4.0.0-beta.1.us
+// replace github.com/peterbourgon/ff/v4 v4.0.0-beta.1 => github.com/UNO-SOFT/ff/v4 v4.0.0-beta.1.us
+
+// replace github.com/pressly/cli v0.8.0 => github.com/UNO-SOFT/cli v0.0.0-20261009074406-95b18dbd4953

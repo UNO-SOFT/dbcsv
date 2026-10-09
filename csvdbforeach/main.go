@@ -23,9 +23,9 @@ import (
 	"golang.org/x/text/encoding/htmlindex"
 	"golang.org/x/text/transform"
 
+	"github.com/UNO-SOFT/cli"
 	"github.com/UNO-SOFT/dbcsv"
 	"github.com/UNO-SOFT/zlog/v2"
-	"github.com/pressly/cli"
 
 	_ "github.com/godror/godror"
 )

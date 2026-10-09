@@ -1,4 +1,4 @@
-// Copyright 2021, 2024 Tamás Gulácsi.
+// Copyright 2021, 2026 Tamás Gulácsi.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -27,8 +27,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/peterbourgon/ff/v4"
-	"github.com/peterbourgon/ff/v4/ffhelp"
+	"github.com/UNO-SOFT/cli"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/godror/godror"
@@ -77,41 +76,38 @@ func Main() error {
 	}
 
 	cfg := config{Config: new(dbcsv.Config)}
-	appFS := flag.NewFlagSet("csvload", flag.ContinueOnError)
-	appFS.StringVar(&cfg.Charset, "charset", encName, "input charset")
-	appFS.StringVar(&cfg.Delim, "delim", "", "CSV separator")
-	appFS.IntVar(&cfg.Concurrency, "concurrency", 4, "concurrency")
-	appFS.StringVar(&dateFormat, "date", dateFormat, "date format, in Go notation")
-	appFS.IntVar(&cfg.Skip, "skip", 0, "skip rows")
-	appFS.IntVar(&cfg.Sheet, "sheet", 0, "sheet of spreadsheet")
-	appFS.StringVar(&cfg.ColumnsString, "columns", "", "columns, comma separated indexes")
-	flagMemProf := appFS.String("memprofile", "", "file to output memory profile to")
-	flagCPUProf := appFS.String("cpuprofile", "", "file to output CPU profile to")
-	appFset := ff.NewFlagSetFrom(appFS.Name(), appFS)
+	aFlags := flag.NewFlagSet("csvload", flag.ContinueOnError)
+	aFlags.StringVar(&cfg.Charset, "charset", encName, "input charset")
+	aFlags.StringVar(&cfg.Delim, "delim", "", "CSV separator")
+	aFlags.IntVar(&cfg.Concurrency, "concurrency", 4, "concurrency")
+	aFlags.StringVar(&dateFormat, "date", dateFormat, "date format, in Go notation")
+	aFlags.IntVar(&cfg.Skip, "skip", 0, "skip rows")
+	aFlags.IntVar(&cfg.Sheet, "sheet", 0, "sheet of spreadsheet")
+	aFlags.StringVar(&cfg.ColumnsString, "columns", "", "columns, comma separated indexes")
+	flagMemProf := aFlags.String("memprofile", "", "file to output memory profile to")
+	flagCPUProf := aFlags.String("cpuprofile", "", "file to output CPU profile to")
 
-	FS := flag.NewFlagSet("load", flag.ContinueOnError)
-	flagConnect := FS.String("connect", os.Getenv("DB_ID"), "database to connect to")
-	FS.BoolVar(&cfg.Truncate, "truncate", false, "truncate table")
-	FS.StringVar(&cfg.Tablespace, "tablespace", "DATA", "tablespace to create table in")
-	flagFields := FS.String("fields", "", "target fields, comma separated names")
-	FS.BoolVar(&cfg.ForceString, "force-string", false, "force all columns to be VARCHAR2")
-	FS.BoolVar(&cfg.JustPrint, "just-print", false, "just print the INSERTs")
-	FS.BoolVar(&cfg.TrimCols, "trim-cols", false, "trim columns")
-	FS.StringVar(&cfg.Copy, "copy", "", "copy this table's structure")
-	FS.IntVar(&cfg.ChunkSize, "chunk-size", defaultChunkSize, "chunk size - number of rows inserted at once")
-	FS.Var(&verbose, "v", "verbose logging")
-	FS.BoolVar(&cfg.LobSource, "lob", false, "source is not a filename but a query that returns a LOB")
+	flags := flag.NewFlagSet("load", flag.ContinueOnError)
+	flagConnect := flags.String("connect", os.Getenv("DB_ID"), "database to connect to")
+	flags.BoolVar(&cfg.Truncate, "truncate", false, "truncate table")
+	flags.StringVar(&cfg.Tablespace, "tablespace", "DATA", "tablespace to create table in")
+	flagFields := flags.String("fields", "", "target fields, comma separated names")
+	flags.BoolVar(&cfg.ForceString, "force-string", false, "force all columns to be VARCHAR2")
+	flags.BoolVar(&cfg.JustPrint, "just-print", false, "just print the INSERTs")
+	flags.BoolVar(&cfg.TrimCols, "trim-cols", false, "trim columns")
+	flags.StringVar(&cfg.Copy, "copy", "", "copy this table's structure")
+	flags.IntVar(&cfg.ChunkSize, "chunk-size", defaultChunkSize, "chunk size - number of rows inserted at once")
+	flags.Var(&verbose, "v", "verbose logging")
+	flags.BoolVar(&cfg.LobSource, "lob", false, "source is not a filename but a query that returns a LOB")
 	if *flagConnect == "" {
 		if *flagConnect = os.Getenv("BRUNO_OWNER_ID"); *flagConnect == "" {
 			*flagConnect = os.Getenv("BRUNO_ID")
 		}
 	}
-	fset := ff.NewFlagSetFrom(FS.Name(), FS)
-	fset.SetParent(appFset)
-	loadCmd := ff.Command{Name: "load",
-		Flags: fset,
-		Exec: func(ctx context.Context, args []string) error {
-			if len(args) != 2 {
+	loadCmd := cli.Command{Name: "load",
+		Flags: flags,
+		Exec: func(ctx context.Context, state *cli.State) error {
+			if len(state.Args) != 2 {
 				return errors.New("need two args: the table and the source")
 			}
 			P, err := godror.ParseConnString(*flagConnect)
@@ -127,15 +123,14 @@ func Main() error {
 			db.SetMaxIdleConns(0)
 			fields := strings.FieldsFunc(*flagFields, func(r rune) bool { return r == ',' || r == ';' || r == ' ' })
 
-			return cfg.load(ctx, db, args[0], args[1], fields)
+			return cfg.load(ctx, db, state.Args[0], state.Args[1], fields)
 		},
 	}
 
-	fset = ff.NewFlagSet("sheet")
-	fset.SetParent(appFset)
-	sheetCmd := ff.Command{Name: "sheet", Flags: fset,
-		Exec: func(ctx context.Context, args []string) error {
-			if err := cfg.Config.Open(args[0]); err != nil {
+	flags = flag.NewFlagSet("sheet", flag.ContinueOnError)
+	sheetCmd := cli.Command{Name: "sheet", Flags: flags,
+		Exec: func(ctx context.Context, state *cli.State) error {
+			if err := cfg.Config.Open(state.Args[0]); err != nil {
 				return err
 			}
 			defer cfg.Close()
@@ -155,9 +150,9 @@ func Main() error {
 		},
 	}
 
-	app := ff.Command{Name: "csvload", Flags: appFset,
+	app := &cli.Command{Name: "csvload", Flags: aFlags,
 		Usage:       "load from csv/xls/ods into database table",
-		Subcommands: []*ff.Command{&loadCmd, &sheetCmd},
+		SubCommands: []*cli.Command{&loadCmd, &sheetCmd},
 	}
 
 	args := os.Args[1:]
@@ -170,16 +165,12 @@ func Main() error {
 	if !foundSubcommand {
 		args = append(append(make([]string, 0, 1+len(args)), "load"), args...)
 	}
-	if err := app.Parse(args); err != nil {
-		if errors.Is(err, ff.ErrHelp) {
-			ffhelp.Command(&app).WriteTo(os.Stderr)
-			return nil
-		}
-		if len(args) == 0 {
+	if err := cli.Parse(app, args); err != nil {
+		if err = cli.HandleErrHelp(err, app, nil); err == nil || len(args) == 0 {
 			return err
 		}
-		if err = app.Parse(append(append(make([]string, 0, 1+len(args)), "load"), args...)); err != nil {
-			ffhelp.Command(&app).WriteTo(os.Stderr)
+		if err = cli.Parse(app, append(append(make([]string, 0, 1+len(args)), "load"), args...)); err != nil {
+			cli.PrintHelp(os.Stderr, app)
 			return err
 		}
 	}
@@ -213,7 +204,7 @@ func Main() error {
 
 	ctx, cancel := dbcsv.Wrap(context.Background())
 	defer cancel()
-	return app.Run(ctx)
+	return cli.Run(ctx, app, nil)
 }
 
 func (cfg config) load(ctx context.Context, db *sql.DB, tbl, src string, fields []string) error {
