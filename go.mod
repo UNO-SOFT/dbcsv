@@ -3,8 +3,8 @@ module github.com/UNO-SOFT/dbcsv
 go 1.27.0
 
 require (
-	github.com/UNO-SOFT/cli v0.0.0-20261009074406-95b18dbd4953
-	github.com/UNO-SOFT/spreadsheet v0.1.10-0.20261008124401-8d6982c91ca0
+	github.com/UNO-SOFT/cli v0.0.0-20261012150915-f7b2ef801faf
+	github.com/UNO-SOFT/spreadsheet v0.1.10-0.20261013093640-1d73bbafcbab
 	github.com/UNO-SOFT/zlog v0.8.6
 	github.com/extrame/xls v0.0.2-0.20180905092746-539786826ced
 	github.com/godror/godror v0.51.4
