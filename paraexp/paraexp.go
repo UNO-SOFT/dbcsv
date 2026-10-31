@@ -152,6 +152,7 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 				errS = err.Error()
 			}
 			bwMu.Lock()
+			defer bwMu.Unlock()
 			if first {
 				first = false
 			} else {
@@ -162,7 +163,6 @@ parallel and dump all the results in one JSON object, named as "name1" and "name
 			if encErr := enc.Encode(Table{Name: name, Error: errS, Rows: rows}); encErr != nil && err == nil {
 				err = encErr
 			}
-			bwMu.Unlock()
 			return err
 		})
 	}
