@@ -131,7 +131,7 @@ and dump all the columns of the cursor returned by the function.
 	var params []any
 	db, err := sql.Open("godror", *flagConnect)
 	if err != nil {
-		return fmt.Errorf("%s: %w", *flagConnect, err)
+		return fmt.Errorf("connect to %s: %w", *flagConnect, err)
 	}
 	defer db.Close()
 	db.SetMaxOpenConns(2)

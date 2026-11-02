@@ -7,7 +7,7 @@ require (
 	github.com/UNO-SOFT/spreadsheet v0.1.10-0.20261013093640-1d73bbafcbab
 	github.com/UNO-SOFT/zlog v0.8.6
 	github.com/extrame/xls v0.0.2-0.20180905092746-539786826ced
-	github.com/godror/godror v0.51.4
+	github.com/godror/godror v0.51.5
 	github.com/google/go-cmp v0.7.0
 	github.com/google/renameio/v2 v2.0.2
 	github.com/klauspost/compress v1.19.0
